@@ -53,7 +53,7 @@ Legacy dashboard exports that contain old tunnel/client/server/service fields ca
 1. Install or upgrade Nowhere and OpenCtrl on each node.
 2. Add the OpenCtrl `/api/v2` endpoint to NowhereDash.
 3. Recreate each required workload as a Nowhere `portal://` instance.
-4. Verify each generated `vector://` URL and QR code.
+4. Verify each generated `nowhere://` URL and QR code.
 5. Recreate subscriptions from the new Portal list.
 6. Retire the old dashboard only after traffic and subscription pulls are confirmed.
 

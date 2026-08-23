@@ -4,8 +4,13 @@ import (
 	"NowhereDash/internal/models"
 	"NowhereDash/internal/nowhere"
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 	standardlog "log"
 	"strings"
 	"testing"
@@ -66,6 +71,17 @@ func seedPortal(t *testing.T, db *gorm.DB, host string, status models.TunnelStat
 }
 
 func int64Pointer(value int64) *int64 { return &value }
+
+func testSubscriptionIcon(t *testing.T) (string, []byte) {
+	t.Helper()
+	icon := image.NewRGBA(image.Rect(0, 0, subscriptionIconSize, subscriptionIconSize))
+	draw.Draw(icon, icon.Bounds(), image.NewUniform(color.RGBA{R: 37, G: 99, B: 235, A: 255}), image.Point{}, draw.Src)
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, icon); err != nil {
+		t.Fatalf("encode test icon: %v", err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buffer.Bytes()), buffer.Bytes()
+}
 
 func attachInstance(t *testing.T, db *gorm.DB, tunnel *models.Tunnel, instanceID string) {
 	t.Helper()
@@ -228,8 +244,68 @@ func TestRenderPublicProducesNowhereLinesAndPhysicalPortalCount(t *testing.T) {
 	if got := rendered.Headers["profile-title"]; got != "base64:Tm93aGVyZSBTRw==" {
 		t.Fatalf("profile-title = %q", got)
 	}
+	for _, header := range []string{"aw-icon-light", "aw-icon-dark"} {
+		decoded, decodeErr := base64.StdEncoding.DecodeString(rendered.Headers[header])
+		if decodeErr != nil || !bytes.Equal(decoded, defaultSubscriptionIconPNG) {
+			t.Fatalf("%s does not contain the embedded Nowhere logo", header)
+		}
+	}
 	if !strings.Contains(rendered.Headers["subscription-userinfo"], "download=0; total=-1") {
 		t.Fatalf("subscription-userinfo = %q", rendered.Headers["subscription-userinfo"])
+	}
+}
+
+func TestSubscriptionIconUploadPreserveAndReset(t *testing.T) {
+	db := openSubscriptionTestDB(t, nil)
+	portal := seedPortal(t, db, "icon.example", models.TunnelStatusRunning, "tcp", 0)
+	service := NewService(db)
+	iconValue, iconBytes := testSubscriptionIcon(t)
+
+	created, err := service.Create(UpsertRequest{
+		Name: "custom icon", Icon: &iconValue, TunnelIDs: []int64{portal.ID},
+	})
+	if err != nil {
+		t.Fatalf("create subscription with icon: %v", err)
+	}
+	if created.Icon != iconValue {
+		t.Fatalf("created icon = %q, want uploaded data URL", created.Icon)
+	}
+	rendered, err := service.RenderPublic(created.Token)
+	if err != nil {
+		t.Fatalf("render subscription with icon: %v", err)
+	}
+	decodedHeader, err := base64.StdEncoding.DecodeString(rendered.Headers["aw-icon-light"])
+	if err != nil || !bytes.Equal(decodedHeader, iconBytes) {
+		t.Fatal("public subscription header does not contain the uploaded icon")
+	}
+
+	updated, err := service.Update(created.ID, UpsertRequest{
+		Name: "renamed", TunnelIDs: []int64{portal.ID},
+	})
+	if err != nil {
+		t.Fatalf("update subscription without icon: %v", err)
+	}
+	if updated.Icon != iconValue {
+		t.Fatal("updating unrelated fields replaced the custom icon")
+	}
+
+	resetIcon := ""
+	reset, err := service.Update(created.ID, UpsertRequest{
+		Name: "renamed", Icon: &resetIcon, TunnelIDs: []int64{portal.ID},
+	})
+	if err != nil {
+		t.Fatalf("reset subscription icon: %v", err)
+	}
+	if reset.Icon != "/nowhere-icon.png" {
+		t.Fatalf("reset icon = %q, want default icon URL", reset.Icon)
+	}
+	rendered, err = service.RenderPublic(created.Token)
+	if err != nil {
+		t.Fatalf("render reset subscription: %v", err)
+	}
+	decodedHeader, err = base64.StdEncoding.DecodeString(rendered.Headers["aw-icon-dark"])
+	if err != nil || !bytes.Equal(decodedHeader, defaultSubscriptionIconPNG) {
+		t.Fatal("reset subscription header does not contain the default icon")
 	}
 }
 

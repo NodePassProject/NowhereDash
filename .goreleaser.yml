@@ -144,13 +144,21 @@ release:
   replace_existing_draft: true
   # 发布说明
   header: |
-    ## NowhereDash Release Notes (v4.0.6)
-    
-    ### Fix
-    - repair hourly traffic statistics across SQLite and PostgreSQL
+    ## NowhereDash {{ .Version }}
 
-    ### Feature
-    - endpoint page add update config menu 
+    NowhereDash is the new Portal-only dashboard for managing Nowhere nodes through OpenCtrl. It ships as a single Go binary with an embedded React web UI, first-run setup, SQLite/PostgreSQL support, endpoint management, Portal editing, subscriptions, telemetry, and self-update workflows.
+
+    ### Highlights
+    - Manage multiple OpenCtrl `/api/v2` endpoints from one dashboard.
+    - Create, edit, monitor, import, export, and subscribe to Nowhere Portal instances.
+    - Publish selected running Portals as token-authenticated `/sub/portal?token=...` feeds.
+    - Generate matching `nowhere://` import URLs and QR codes for Portal and subscription flows.
+    - Deploy through release archives, Docker images, or the unified installer script.
+
+    ### Changes
+    - Reworked the release notes for the new NowhereDash release line.
+    - Improved node installation diagnostics and API key detection in the installer.
+    - Added subscription profile icons for Anywhere-compatible subscription clients.
 
   footer: |
 

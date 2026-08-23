@@ -53,7 +53,7 @@ sudo /tmp/nowheredash-install.sh update dash --non-interactive
 1. 在每个节点安装或升级 Nowhere 与 OpenCtrl。
 2. 将 OpenCtrl `/api/v2` 端点添加到 NowhereDash。
 3. 将每个需要保留的业务重新创建为 Nowhere `portal://` 实例。
-4. 校验生成的 `vector://` URL 与二维码。
+4. 校验生成的 `nowhere://` URL 与二维码。
 5. 基于新的 Portal 列表重新创建订阅。
 6. 确认流量和订阅拉取正常后，再停用旧面板。
 

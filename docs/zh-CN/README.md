@@ -19,7 +19,7 @@ NowhereDash 是一个通过 [OpenCtrl](https://github.com/NodePassProject/OpenCt
 - **OpenCtrl 端点控制**：在一个面板内管理多个 OpenCtrl `/api/v2` 端点。
 - **完整 Portal 编辑器**：覆盖网络模式、TLS、证书、ALPN、速率限制、拨号、SOCKS、Next Hop、载波、连接池、SNI、Pin 和日志级别。
 - **Metadata 保留**：将 OpenCtrl `meta.tags` 与 `meta.peer` 独立于 Portal URL 保存。
-- **Vector 输出**：为每个 Portal 生成匹配的 `vector://` URL 与二维码。
+- **Portal 导入输出**：为每个 Portal 生成匹配的 `nowhere://` URL 与二维码。
 - **托管订阅**：将选定的运行中 Portal 发布为带 Token 鉴权的 `/sub/portal?token=...` 订阅。
 - **实时遥测**：通过 SSE 和 WebSocket 展示状态、流量、连接数、延迟与日志。
 - **流量与历史工具**：查看运行指标、清理历史数据，并在维护窗口执行 SQLite 停服压缩。
@@ -74,7 +74,7 @@ portal://<shared-key>@<listen-host>:<port>
 
 ## Portal 订阅
 
-订阅菜单可将选定的已有 Portal 发布到 `/sub/portal?token=...`。服务端会在每次拉取时根据当前运行中的 Portal 动态生成正文，正文包含一行或多行 `nowhere://` URL，不会混入 Portal 页面单独展示的 `vector://` 凭据。
+订阅菜单可将选定的已有 Portal 发布到 `/sub/portal?token=...`。服务端会在每次拉取时根据当前运行中的 Portal 动态生成正文，正文包含一行或多行 `nowhere://` URL。Portal 导入与订阅使用统一的 URL scheme。
 
 订阅支持到期时间、流量上限、传输偏好、流量重置、正文预览、Token 轮换，以及通过 `anywhere://add-proxy` 一键导入 Anywhere。订阅 URL 属于 Bearer Secret，生产环境应使用 HTTPS，并在反向代理、CDN 与可观测性日志中隐藏 `token` 查询参数。
 

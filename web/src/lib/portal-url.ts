@@ -291,5 +291,5 @@ export const deriveVectorUrl = (
     .map(([key, value]) => `${key}=${encodeValue(value)}`)
     .join("&");
 
-  return `vector://${encodeValue(sharedKey)}@${formatHost(publicHost)}:${listenPort}?${query}`;
+  return `nowhere://${encodeValue(sharedKey)}@${formatHost(publicHost)}:${listenPort}?${query}`;
 };

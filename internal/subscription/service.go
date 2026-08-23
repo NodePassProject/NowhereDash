@@ -101,7 +101,7 @@ func (s *Service) Create(req UpsertRequest) (*Response, error) {
 			return tokenErr
 		}
 		created = models.PortalSubscription{
-			Name: values.Name, ProfileTitle: values.ProfileTitle, Token: token,
+			Name: values.Name, Icon: values.Icon, ProfileTitle: values.ProfileTitle, Token: token,
 			ExpiresAt: values.ExpiresAt, TrafficLimit: values.TrafficLimit,
 			ExpandCarrierCombos: values.ExpandCarrierCombos,
 			UpCarrier:           values.UpCarrier, DownCarrier: values.DownCarrier, IncludeIPv6: values.IncludeIPv6,
@@ -141,6 +141,9 @@ func (s *Service) Update(id int64, req UpsertRequest) (*Response, error) {
 			"expires_at": values.ExpiresAt, "traffic_limit": values.TrafficLimit, "over_limit": overLimit,
 			"expand_carrier_combos": values.ExpandCarrierCombos, "up_carrier": values.UpCarrier,
 			"down_carrier": values.DownCarrier, "include_ipv6": values.IncludeIPv6, "updated_at": s.now(),
+		}
+		if values.IconSet {
+			updates["icon"] = values.Icon
 		}
 		if err := tx.Model(&current).Updates(updates).Error; err != nil {
 			return err
@@ -526,6 +529,8 @@ func (s *Service) renderContent(subscription models.PortalSubscription) (Rendere
 
 type validatedRequest struct {
 	Name, ProfileTitle     string
+	Icon                   []byte
+	IconSet                bool
 	ExpiresAt              *time.Time
 	TrafficLimit           *int64
 	ExpandCarrierCombos    bool
@@ -544,6 +549,14 @@ func (s *Service) validateRequest(req UpsertRequest) (validatedRequest, []int64,
 	}
 	if len([]byte(profileTitle)) > 255 {
 		return validatedRequest{}, nil, errors.New("profileTitle must contain at most 255 bytes")
+	}
+	var icon []byte
+	if req.Icon != nil {
+		var err error
+		icon, err = decodeSubscriptionIcon(*req.Icon)
+		if err != nil {
+			return validatedRequest{}, nil, err
+		}
 	}
 	if req.TrafficLimit != nil && *req.TrafficLimit < 0 {
 		return validatedRequest{}, nil, errors.New("trafficLimit must be nonnegative or null")
@@ -577,7 +590,7 @@ func (s *Service) validateRequest(req UpsertRequest) (validatedRequest, []int64,
 		}
 	}
 	return validatedRequest{
-		Name: name, ProfileTitle: profileTitle, ExpiresAt: req.ExpiresAt,
+		Name: name, ProfileTitle: profileTitle, Icon: icon, IconSet: req.Icon != nil, ExpiresAt: req.ExpiresAt,
 		TrafficLimit: req.TrafficLimit, ExpandCarrierCombos: preferences.ExpandCarrierCombos,
 		UpCarrier: preferences.UpCarrier, DownCarrier: preferences.DownCarrier, IncludeIPv6: preferences.IncludeIPv6,
 	}, tunnelIDs, nil
@@ -623,7 +636,7 @@ func replaceTunnelLinks(tx *gorm.DB, subscription *models.PortalSubscription, tu
 
 func responseFromModel(subscription models.PortalSubscription, tunnelIDs []int64) *Response {
 	return &Response{
-		ID: subscription.ID, Name: subscription.Name, ProfileTitle: subscription.ProfileTitle,
+		ID: subscription.ID, Name: subscription.Name, Icon: subscriptionIconDataURL(subscription.Icon), ProfileTitle: subscription.ProfileTitle,
 		Token: subscription.Token, SubscriptionURL: subscriptionURL(subscription.Token),
 		ExpiresAt: subscription.ExpiresAt, TrafficLimit: subscription.TrafficLimit,
 		TrafficUsed: subscription.TrafficUsed, OverLimit: subscription.OverLimit,
@@ -892,6 +905,7 @@ func percentEncode(value string) string {
 
 func subscriptionHeaders(subscription models.PortalSubscription) map[string]string {
 	title := base64.StdEncoding.EncodeToString([]byte(subscription.ProfileTitle))
+	icon := subscriptionIconBase64(subscription.Icon)
 	total := int64(-1)
 	if subscription.TrafficLimit != nil {
 		total = *subscription.TrafficLimit
@@ -904,6 +918,8 @@ func subscriptionHeaders(subscription models.PortalSubscription) map[string]stri
 		parts = append(parts, "expire="+strconv.FormatInt(subscription.ExpiresAt.Unix(), 10))
 	}
 	return map[string]string{
+		"aw-icon-dark":           icon,
+		"aw-icon-light":          icon,
 		"profile-title":          "base64:" + title,
 		"subscription-userinfo":  strings.Join(parts, "; "),
 		"cache-control":          "no-store",

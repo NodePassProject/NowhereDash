@@ -1609,13 +1609,34 @@ EOF
     chmod 0755 "$NODE_CTL"
 }
 
+node_service_pid() {
+    local pid
+    pid=$(systemctl show "$NODE_SERVICE" --property MainPID --value 2>/dev/null || true)
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+    printf '%s' "$pid"
+}
+
+show_node_diagnostics() {
+    local pid
+    if pid=$(node_service_pid); then
+        journalctl -u "$NODE_SERVICE" "_PID=$pid" -n 100 --no-pager 2>/dev/null
+    else
+        journalctl -u "$NODE_SERVICE" --since '-2 minutes' -n 100 --no-pager 2>/dev/null
+    fi | sed -E \
+        -e 's/(API key (created|loaded): )[[:xdigit:]]{32}/\1<redacted>/g' \
+        -e 's#(portal://)[^/@[:space:]]+@#\1<redacted>@#g'
+}
+
 extract_node_api_key() {
-    local key=""
+    local key="" state_file="$NODE_STATE_DIR/openctrl.gob"
     local i
     for ((i = 0; i < 20; i++)); do
-        key=$(journalctl -u "$NODE_SERVICE" -n 200 --no-pager 2>/dev/null |
-            sed -nE 's/.*Master\.run: API key (created|loaded): ([0-9a-f]{32}).*/\2/p' |
-            tail -n 1)
+        key=""
+        if [[ -s "$state_file" ]]; then
+            # OpenCtrl persists the 32-character API key in its reserved gob record.
+            key=$(grep -a -o '[0-9a-f]\{32\}' "$state_file" 2>/dev/null |
+                sed -n '1p' || true)
+        fi
         if [[ "$key" =~ ^[0-9a-f]{32}$ ]]; then
             printf '%s' "$key"
             return 0
@@ -1789,7 +1810,7 @@ install_node() {
     systemctl daemon-reload
     systemctl enable "$NODE_SERVICE" >/dev/null
     if ! systemctl restart "$NODE_SERVICE" || ! wait_service_active "$NODE_SERVICE"; then
-        journalctl -u "$NODE_SERVICE" -n 100 --no-pager >&2 || true
+        show_node_diagnostics >&2 || true
         [[ "$had_oc" -eq 1 ]] && rollback_binary "$OPENCTRL_BINARY"
         [[ "$had_nw" -eq 1 ]] && rollback_binary "$NOWHERE_BINARY"
         systemctl restart "$NODE_SERVICE" >/dev/null 2>&1 || true
@@ -1797,11 +1818,11 @@ install_node() {
     fi
 
     api_key=$(extract_node_api_key) || {
-        journalctl -u "$NODE_SERVICE" -n 100 --no-pager >&2 || true
+        show_node_diagnostics >&2 || true
         die "无法从 OpenCtrl 日志读取 API Key。"
     }
     if ! probe_node "$api_key"; then
-        journalctl -u "$NODE_SERVICE" -n 100 --no-pager >&2 || true
+        show_node_diagnostics >&2 || true
         [[ "$had_oc" -eq 1 ]] && rollback_binary "$OPENCTRL_BINARY"
         [[ "$had_nw" -eq 1 ]] && rollback_binary "$NOWHERE_BINARY"
         systemctl restart "$NODE_SERVICE" >/dev/null 2>&1 || true

@@ -15,6 +15,7 @@ export interface PortalOption {
 export interface PortalSubscription {
   id: number;
   name: string;
+  icon: string;
   profileTitle: string;
   token: string;
   expiresAt: string | null;
@@ -38,6 +39,7 @@ export interface SubscriptionPreferences {
 
 export interface SubscriptionPayload {
   name: string;
+  icon?: string;
   profileTitle: string;
   expiresAt: string | null;
   trafficLimit: number | null;
@@ -52,6 +54,8 @@ export interface SubscriptionPreview {
   portalCount: number;
   trafficUsed: number;
   headers: {
+    "aw-icon-light": string;
+    "aw-icon-dark": string;
     "profile-title": string;
     "subscription-userinfo": string;
     "cache-control": string;

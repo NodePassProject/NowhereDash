@@ -7,6 +7,7 @@ import "time"
 type PortalSubscription struct {
 	ID                  int64                      `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
 	Name                string                     `json:"name" gorm:"type:text;not null;column:name"`
+	Icon                []byte                     `json:"-" gorm:"column:icon"`
 	ProfileTitle        string                     `json:"profileTitle" gorm:"type:text;not null;column:profile_title"`
 	Token               string                     `json:"token" gorm:"type:text;not null;uniqueIndex;column:token"`
 	ExpiresAt           *time.Time                 `json:"expiresAt,omitempty" gorm:"index;column:expires_at"`

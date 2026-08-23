@@ -19,7 +19,7 @@ This project is Portal-only. It does not include legacy client/server instance m
 - **OpenCtrl endpoint control**: manage multiple OpenCtrl `/api/v2` endpoints from one dashboard.
 - **Complete Portal editor**: handle network mode, TLS, certificates, ALPN, rate limits, dialing, SOCKS, next-hop, carriers, pools, SNI, pinning, and log level.
 - **Metadata preservation**: keep OpenCtrl `meta.tags` and `meta.peer` independent from the Portal URL.
-- **Vector output**: generate a matching `vector://` URL and QR code for every Portal.
+- **Portal import output**: generate a matching `nowhere://` URL and QR code for every Portal.
 - **Managed subscriptions**: publish selected running Portals through token-authenticated `/sub/portal?token=...` feeds.
 - **Real-time telemetry**: stream status, traffic, connection, latency, and log updates through SSE and WebSocket.
 - **Traffic and history tools**: view runtime metrics, clean historical data, and compact SQLite during maintenance windows.
@@ -74,7 +74,7 @@ The generated Vector URL uses `127.0.0.1:1080` as its local SOCKS5 listener. Whe
 
 ## Portal Subscriptions
 
-The Subscription menu publishes selected existing Portals through `/sub/portal?token=...`. The response is generated from current, running Portal data on every pull and contains one or more `nowhere://` URLs; it never includes the separate `vector://` credentials shown on Portal pages.
+The Subscription menu publishes selected existing Portals through `/sub/portal?token=...`. The response is generated from current, running Portal data on every pull and contains one or more `nowhere://` URLs. Portal imports and subscriptions use the same URL scheme.
 
 Subscriptions support expiry, traffic limits, carrier preferences, traffic reset, content preview, token rotation, and one-click import into Anywhere through `anywhere://add-proxy`. A subscription URL is a bearer secret: deploy it over HTTPS and redact its `token` query parameter in reverse-proxy, CDN, and observability logs.
 

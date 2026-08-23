@@ -17,6 +17,7 @@
   },
   "fields": {
     "name": "订阅名称",
+    "icon": "订阅图标",
     "portals": "隧道",
     "status": "状态 / 到期时间",
     "traffic": "流量用量",
@@ -88,7 +89,18 @@
       "offline": "离线"
     },
     "unlimited": "留空表示不限流量",
-    "noExpiry": "留空表示永不过期"
+    "noExpiry": "留空表示永不过期",
+    "uploadIcon": "上传图标",
+    "resetIcon": "恢复默认图标",
+    "cropIconTitle": "裁剪订阅图标",
+    "cropIconArea": "图标裁剪区域",
+    "cropIconHint": "拖动图片调整位置，使用滑块缩放；保存时会自动压缩为 96×96 PNG。",
+    "iconZoom": "缩放",
+    "applyIconCrop": "应用裁剪",
+    "iconInvalidType": "请选择 PNG 图片",
+    "iconInputTooLarge": "原始图片不能超过 5 MiB",
+    "iconOutputTooLarge": "压缩后仍超过 32 KiB，请使用更简洁的图片",
+    "iconProcessFailed": "图片处理失败，请重新选择"
   },
   "validation": {
     "name": "请输入订阅名称",

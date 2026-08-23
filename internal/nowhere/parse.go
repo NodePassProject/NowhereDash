@@ -659,7 +659,7 @@ func BuildVectorURL(tunnel models.Tunnel, portalHost, socksListener string) (str
 		pool = 5
 	}
 	parsed := &url.URL{
-		Scheme: "vector",
+		Scheme: "nowhere",
 		Host:   net.JoinHostPort(portalHost, tunnel.ListenPort),
 		User:   url.User(valueOr(tunnel.SharedKey, "")),
 	}

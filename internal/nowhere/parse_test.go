@@ -199,7 +199,7 @@ func TestBuildVectorURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse Vector URL: %v", err)
 	}
-	if parsed.Scheme != "vector" || parsed.Host != "portal.example:2077" || parsed.User.Username() != "secret" {
+	if parsed.Scheme != "nowhere" || parsed.Host != "portal.example:2077" || parsed.User.Username() != "secret" {
 		t.Fatalf("unexpected Vector URL: %s", vector)
 	}
 	query := parsed.Query()

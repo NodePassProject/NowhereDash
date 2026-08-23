@@ -24,6 +24,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import SubscriptionIconPicker from "@/components/subscriptions/subscription-icon-picker";
 import {
   createSubscription,
   PortalOption,
@@ -41,6 +42,7 @@ interface SubscriptionFormModalProps {
 }
 
 interface SubscriptionFormState {
+  icon: string | null;
   name: string;
   expiresAt: string;
   trafficLimitGiB: string;
@@ -50,6 +52,7 @@ interface SubscriptionFormState {
 const GIB = 1024 ** 3;
 
 const INITIAL_FORM: SubscriptionFormState = {
+  icon: null,
   name: "",
   expiresAt: "",
   trafficLimitGiB: "",
@@ -287,6 +290,9 @@ const toFormState = (
   if (!subscription) return INITIAL_FORM;
 
   return {
+    icon: subscription.icon.startsWith("data:image/png;base64,")
+      ? subscription.icon
+      : null,
     name: subscription.name,
     expiresAt: toLocalDateTime(subscription.expiresAt),
     trafficLimitGiB:
@@ -306,6 +312,7 @@ export default function SubscriptionFormModal({
 }: SubscriptionFormModalProps) {
   const { t } = useTranslation("subscriptions");
   const [form, setForm] = useState<SubscriptionFormState>(INITIAL_FORM);
+  const [iconChanged, setIconChanged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [availableQuery, setAvailableQuery] = useState("");
@@ -323,6 +330,7 @@ export default function SubscriptionFormModal({
   useEffect(() => {
     if (!isOpen) return;
     setForm(toFormState(subscription));
+    setIconChanged(false);
     setAttempted(false);
     setAvailableQuery("");
     setSelectedQuery("");
@@ -486,6 +494,7 @@ export default function SubscriptionFormModal({
             includeIpv6: false,
           },
       tunnelIds: form.tunnelIds,
+      ...(iconChanged ? { icon: form.icon ?? "" } : {}),
     };
 
     setSubmitting(true);
@@ -543,10 +552,10 @@ export default function SubscriptionFormModal({
               <ModalBody className="min-h-0 flex-1 overflow-y-auto py-4">
                 <div className="min-w-0 space-y-5">
                   <section className="min-w-0 space-y-3">
-                    <div className="grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7.25rem]">
                       <FormField
                         required
-                        className="sm:col-span-2"
+                        className="md:col-span-2"
                         label={t("fields.name")}
                       >
                         <Input
@@ -563,6 +572,13 @@ export default function SubscriptionFormModal({
                           }
                         />
                       </FormField>
+                      <SubscriptionIconPicker
+                        value={form.icon}
+                        onChange={(icon) => {
+                          setForm((current) => ({ ...current, icon }));
+                          setIconChanged(true);
+                        }}
+                      />
                       <FormField
                         hint={t("form.noExpiry")}
                         label={t("fields.expiresAt")}

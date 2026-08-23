@@ -17,6 +17,7 @@
   },
   "fields": {
     "name": "Subscription name",
+    "icon": "Subscription icon",
     "portals": "Tunnels",
     "status": "Status / expiry",
     "traffic": "Traffic usage",
@@ -88,7 +89,18 @@
       "offline": "Offline"
     },
     "unlimited": "Leave blank for unlimited",
-    "noExpiry": "Leave blank for no expiry"
+    "noExpiry": "Leave blank for no expiry",
+    "uploadIcon": "Upload icon",
+    "resetIcon": "Restore default icon",
+    "cropIconTitle": "Crop subscription icon",
+    "cropIconArea": "Icon crop area",
+    "cropIconHint": "Drag to reposition and use the slider to zoom. The result is compressed to a 96×96 PNG.",
+    "iconZoom": "Zoom",
+    "applyIconCrop": "Apply crop",
+    "iconInvalidType": "Choose a PNG image",
+    "iconInputTooLarge": "The source image must not exceed 5 MiB",
+    "iconOutputTooLarge": "The compressed icon still exceeds 32 KiB. Choose a simpler image.",
+    "iconProcessFailed": "The image could not be processed. Choose it again."
   },
   "validation": {
     "name": "Enter a subscription name",

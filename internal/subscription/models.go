@@ -11,6 +11,7 @@ type Preferences struct {
 
 type UpsertRequest struct {
 	Name         string       `json:"name" binding:"required"`
+	Icon         *string      `json:"icon"`
 	ProfileTitle string       `json:"profileTitle"`
 	ExpiresAt    *time.Time   `json:"expiresAt"`
 	TrafficLimit *int64       `json:"trafficLimit"`
@@ -21,6 +22,7 @@ type UpsertRequest struct {
 type Response struct {
 	ID              int64       `json:"id"`
 	Name            string      `json:"name"`
+	Icon            string      `json:"icon"`
 	ProfileTitle    string      `json:"profileTitle"`
 	Token           string      `json:"token"`
 	SubscriptionURL string      `json:"subscriptionUrl"`

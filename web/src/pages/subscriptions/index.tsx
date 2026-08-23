@@ -487,9 +487,16 @@ export default function SubscriptionsPage() {
                   return (
                     <TableRow key={String(subscription.id)}>
                       <TableCell>
-                        <p className="max-w-52 truncate font-medium">
-                          {subscription.name}
-                        </p>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <img
+                            alt=""
+                            className="size-8 shrink-0 rounded-lg border border-default-200 bg-content1 object-cover shadow-small"
+                            src={subscription.icon || "/nowhere-icon.png"}
+                          />
+                          <p className="max-w-52 truncate font-medium">
+                            {subscription.name}
+                          </p>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-default-600">
@@ -559,6 +566,11 @@ export default function SubscriptionsPage() {
                     className="w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-default-200 p-4"
                   >
                     <div className="flex items-start gap-3">
+                      <img
+                        alt=""
+                        className="size-10 shrink-0 rounded-lg border border-default-200 bg-content1 object-cover shadow-small"
+                        src={subscription.icon || "/nowhere-icon.png"}
+                      />
                       <div className="min-w-0">
                         <p className="truncate font-medium">
                           {subscription.name}

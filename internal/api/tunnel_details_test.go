@@ -77,7 +77,7 @@ func TestTunnelDetailsUsesExpandedConfigURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse Vector URL: %v", err)
 	}
-	if vectorURL.User == nil || vectorURL.User.Username() != "runtime" || vectorURL.Host != "portal.example:2077" ||
+	if vectorURL.Scheme != "nowhere" || vectorURL.User == nil || vectorURL.User.Username() != "runtime" || vectorURL.Host != "portal.example:2077" ||
 		vectorURL.Query().Get("up") != "tcp" || vectorURL.Query().Get("down") != "tcp" {
 		t.Fatalf("Vector URL did not use expanded config: %s", response.VectorURL)
 	}
