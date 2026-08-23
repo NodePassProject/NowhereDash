@@ -1,0 +1,118 @@
+name: Release Beta
+
+on:
+  push:
+    tags: [ 'v*.*.*-beta*' ]
+    branches: [ '*-beta*' ]
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'web/pnpm-lock.yaml'
+
+      - name: 🏗️ 构建前端并准备嵌入
+        run: |
+          echo "📦 安装前端依赖..."
+          cd web
+          pnpm install --frozen-lockfile
+          
+          echo "🏗️ 构建前端静态文件..."
+          pnpm build
+          
+          echo "📁 验证构建结果:"
+          ls -la ../cmd/server/dist/
+          
+          echo "✅ 前端构建完成，文件已输出到 cmd/server/dist/"
+
+      # 改用 modernc.org/sqlite (纯 Go) 后,所有目标平台都走 CGO_ENABLED=0 交叉编译,
+      # 不再需要 mingw / gcc-aarch64-linux-gnu / gcc-arm-linux-gnueabihf 等 C 工具链。
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 📝 获取Beta版本信息
+        id: get_version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # 标签触发处理
+            RAW_VERSION=${GITHUB_REF#refs/tags/}
+            
+            # 处理 v*.*.*-beta* 格式的标签
+            # v2.0.1-beta1 -> 2.0.1-beta1 (保持简洁的版本号)
+            if [[ $RAW_VERSION =~ ^v([0-9]+\.[0-9]+\.[0-9]+-(beta|alpha|rc)[0-9]*)$ ]]; then
+              VERSION="${BASH_REMATCH[1]}"
+              TEMP_TAG="$RAW_VERSION"
+              IS_TAG_TRIGGER=true
+              echo "🏷️ Beta tag triggered: $RAW_VERSION → $VERSION"
+              echo "✅ 使用简洁的Beta版本号: $VERSION"
+            else
+              echo "❌ 错误: Beta标签格式不正确，期望格式: v*.*.*-beta*，实际: $RAW_VERSION"
+              exit 1
+            fi
+          else
+            # 分支触发处理
+            VERSION=$(node -p "require('./web/package.json').version")
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            TEMP_TAG="v${VERSION}"
+            IS_TAG_TRIGGER=false
+            echo "🌿 Beta branch triggered: $BRANCH_NAME → $VERSION"
+            echo "✅ 使用简洁的版本号，不添加分支名和commit hash"
+            
+            # 创建临时标签
+            if ! git tag -l | grep -q "^$TEMP_TAG$"; then
+              echo "📌 Creating temporary tag: $TEMP_TAG"
+              git tag "$TEMP_TAG"
+            fi
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$TEMP_TAG" >> $GITHUB_OUTPUT
+          echo "is_tag_trigger=$IS_TAG_TRIGGER" >> $GITHUB_OUTPUT
+          
+      - name: 🚀 运行 GoReleaser (Beta正式发布)
+        if: steps.get_version.outputs.is_tag_trigger == 'true'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: 'latest'
+          args: release --clean --skip=validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🏗️ 运行 GoReleaser (Beta开发构建)
+        if: steps.get_version.outputs.is_tag_trigger == 'false'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: 'latest'
+          args: release --clean --skip=validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 📢 输出构建信息
+        run: |
+          echo "🏷️ 版本: ${{ steps.get_version.outputs.version }}"
+          echo "🏷️ 标签: ${{ steps.get_version.outputs.tag_name }}"
+          echo "🏷️ 触发方式: ${{ steps.get_version.outputs.is_tag_trigger == 'true' && 'Tag' || 'Branch' }}" 

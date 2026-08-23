@@ -1,0 +1,49 @@
+{
+  "confirmation": {
+    "defaultConfirm": "确认",
+    "defaultCancel": "取消"
+  },
+  "manualCopy": {
+    "defaultTitle": "手动复制",
+    "description": "自动复制失败，请手动选择并复制以下内容：",
+    "hint": "💡 提示：点击上方文本框可全选内容，然后使用 Ctrl+C (Windows) 或 Cmd+C (Mac) 复制",
+    "understood": "知道了"
+  },
+  "networkDebug": {
+    "title": "网络调试",
+    "description": "对指定地址进行网络连通性测试",
+    "form": {
+      "targetAddress": "目标地址",
+      "targetPlaceholder": "IP:端口 或 域名:端口",
+      "testCount": "测试次数",
+      "interval": "间隔时间(ms)"
+    },
+    "loading": {
+      "title": "测试中...",
+      "description": "正在连接目标地址进行网络测试"
+    },
+    "stats": {
+      "success": "成功",
+      "failed": "失败",
+      "packetLoss": "丢包率",
+      "avgLatency": "平均延迟",
+      "maxLatency": "最高延迟",
+      "minLatency": "最低延迟"
+    },
+    "buttons": {
+      "startTest": "开始测试",
+      "retryTest": "重新测试",
+      "stopTest": "停止测试"
+    },
+    "toast": {
+      "testFailed": "测试失败",
+      "networkError": "网络错误",
+      "testStarted": "开始测试",
+      "testStartedDesc": "目标={{target}}, 次数={{count}}, 间隔={{interval}}ms",
+      "testCompleted": "测试完成",
+      "testCompletedDesc": "网络测试已完成，共执行 {{count}} 次测试",
+      "testStopped": "测试已停止",
+      "testStoppedDesc": "网络测试已手动停止"
+    }
+  }
+}

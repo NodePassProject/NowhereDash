@@ -1,0 +1,161 @@
+{
+  "title": "订阅管理",
+  "total": "显示 {{shown}} 个，共 {{total}} 个订阅",
+  "search": {
+    "placeholder": "搜索订阅名称",
+    "status": "订阅状态"
+  },
+  "filter": {
+    "all": "全部状态",
+    "overLimit": "已超流量",
+    "expired": "已过期"
+  },
+  "status": {
+    "active": "正常",
+    "overLimit": "已超流量",
+    "expired": "已过期"
+  },
+  "fields": {
+    "name": "订阅名称",
+    "portals": "隧道",
+    "status": "状态 / 到期时间",
+    "traffic": "流量用量",
+    "subscriptionUrl": "订阅 URL",
+    "actions": "操作",
+    "expiresAt": "到期时间",
+    "trafficLimit": "流量上限",
+    "expandCarrierCombos": "展开所有可用传输组合",
+    "upCarrier": "上行传输",
+    "downCarrier": "下行传输"
+  },
+  "values": {
+    "never": "永不过期",
+    "unlimited": "不限流量",
+    "portalCount": "{{count}} 个隧道",
+    "remainingDays": "剩余 {{count}} 天"
+  },
+  "actions": {
+    "create": "创建订阅",
+    "createShort": "订阅",
+    "save": "保存",
+    "cancel": "取消",
+    "close": "关闭",
+    "refresh": "刷新",
+    "resetFilters": "重置",
+    "copy": "复制",
+    "copyUrl": "复制订阅 URL",
+    "importAnywhere": "导入 Anywhere",
+    "scanImport": "扫码导入",
+    "edit": "编辑",
+    "rotateToken": "轮换 Token",
+    "resetTraffic": "重置流量",
+    "neverExpire": "永不过期",
+    "done": "完成",
+    "delete": "删除"
+  },
+  "empty": {
+    "title": "暂无订阅",
+    "hint": "创建一个订阅，将现有隧道发布给 Nowhere 客户端。",
+    "loading": "正在加载订阅...",
+    "loadFailed": "订阅列表加载失败",
+    "retry": "重试"
+  },
+  "form": {
+    "createTitle": "创建隧道订阅",
+    "editTitle": "编辑隧道订阅",
+    "subtitle": "正文始终按当前隧道配置动态生成",
+    "namePlaceholder": "例如：Nowhere 全球节点",
+    "portalPlaceholder": "选择要发布的隧道",
+    "selectedPortals": "已选择 {{count}} 个：{{names}}",
+    "availableTunnels": "可选隧道",
+    "selectedTunnels": "已选隧道",
+    "selectedTunnelCount": "已选择 {{count}} 条",
+    "tunnelCount": "{{count}} 条",
+    "searchTunnels": "搜索隧道",
+    "selectAllAvailable": "选择全部当前可选隧道",
+    "selectAllSelected": "选择全部当前已选隧道",
+    "noAvailableTunnels": "没有可选隧道",
+    "noSelectedTunnels": "尚未选择隧道",
+    "noTunnelResults": "没有匹配的隧道",
+    "addSelectedTunnels": "添加勾选的隧道",
+    "addAllVisibleTunnels": "添加当前筛选结果",
+    "removeSelectedTunnels": "移除勾选的隧道",
+    "removeAllVisibleTunnels": "移除当前筛选结果",
+    "tunnelStatus": {
+      "running": "运行中",
+      "stopped": "已停止",
+      "error": "异常",
+      "offline": "离线"
+    },
+    "unlimited": "留空表示不限流量",
+    "noExpiry": "留空表示永不过期"
+  },
+  "validation": {
+    "name": "请输入订阅名称",
+    "portals": "请至少选择一条隧道",
+    "trafficLimit": "流量上限必须大于 0"
+  },
+  "toast": {
+    "loadFailed": "加载订阅失败",
+    "created": "订阅已创建",
+    "updated": "订阅已更新",
+    "saveFailed": "保存订阅失败",
+    "urlCopied": "订阅 URL 已复制",
+    "deleted": "订阅已删除",
+    "rotated": "Token 已轮换",
+    "trafficReset": "订阅流量已重置",
+    "actionFailed": "订阅操作失败"
+  },
+  "import": {
+    "title": "订阅与导入",
+    "vectorTitle": "导入节点",
+    "outputPreferences": "输出配置",
+    "outputPreferencesHint": "展开组合时，mix 隧道会输出 TCP/UDP 的所有有效组合。保存后当前订阅地址立即生效。",
+    "savePreferences": "保存配置",
+    "preferencesSaved": "输出配置已更新",
+    "appDescription": "官方推荐客户端",
+    "action": "导入",
+    "methods": {
+      "label": "选择导入客户端",
+      "anywhere": "Anywhere"
+    },
+    "unavailable": "当前订阅没有可用的订阅 URL。",
+    "vectorUnavailable": "当前隧道没有可用的 Vector 地址。",
+    "qrAlt": "订阅地址二维码",
+    "vectorQrAlt": "Vector 地址二维码",
+    "qrGenerating": "正在生成二维码",
+    "qrError": "无法生成此二维码，请复制地址。",
+    "qrLead": "扫码导入订阅",
+    "vectorQrLead": "扫码导入 Vector 配置",
+    "qrHint": "优先在 Anywhere 内扫码或从相册识别；失败时再复制订阅地址。",
+    "vectorQrHint": "在 Anywhere 内扫码或从相册识别 Vector 地址二维码。",
+    "qrStepOne": "先保存当前二维码。",
+    "qrStepTwo": "在 Anywhere 内完成扫码或导入。",
+    "copySubscriptionUrl": "复制订阅地址",
+    "copyVectorUrl": "复制 Vector 地址",
+    "copied": "已复制",
+    "toast": {
+      "copied": "订阅地址已复制"
+    },
+    "vectorToast": {
+      "copied": "Vector 地址已复制"
+    }
+  },
+  "confirm": {
+    "rotate": {
+      "title": "轮换订阅 Token",
+      "message": "轮换“{{name}}”的 Token 后，旧订阅 URL 会立即失效。已保存旧链接的客户端必须重新导入。",
+      "confirm": "确认轮换"
+    },
+    "reset": {
+      "title": "重置订阅流量",
+      "message": "将“{{name}}”的已用流量重置为 0，并清除超限状态。此操作不会修改流量上限。",
+      "confirm": "确认重置"
+    },
+    "delete": {
+      "title": "删除订阅",
+      "message": "删除“{{name}}”后，其公开订阅 URL 将永久失效。关联的隧道不会被删除。",
+      "confirm": "确认删除"
+    }
+  }
+}

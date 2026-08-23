@@ -1,0 +1,161 @@
+{
+  "title": "Subscription Management",
+  "total": "Showing {{shown}} of {{total}} subscriptions",
+  "search": {
+    "placeholder": "Search subscription name",
+    "status": "Subscription status"
+  },
+  "filter": {
+    "all": "All statuses",
+    "overLimit": "Over traffic limit",
+    "expired": "Expired"
+  },
+  "status": {
+    "active": "Active",
+    "overLimit": "Over limit",
+    "expired": "Expired"
+  },
+  "fields": {
+    "name": "Subscription name",
+    "portals": "Tunnels",
+    "status": "Status / expiry",
+    "traffic": "Traffic usage",
+    "subscriptionUrl": "Subscription URL",
+    "actions": "Actions",
+    "expiresAt": "Expires at",
+    "trafficLimit": "Traffic limit",
+    "expandCarrierCombos": "Expand all available carrier combinations",
+    "upCarrier": "Upstream carrier",
+    "downCarrier": "Downstream carrier"
+  },
+  "values": {
+    "never": "Never expires",
+    "unlimited": "Unlimited",
+    "portalCount": "{{count}} Tunnels",
+    "remainingDays": "{{count}} days remaining"
+  },
+  "actions": {
+    "create": "Create subscription",
+    "createShort": "Subscription",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "refresh": "Refresh",
+    "resetFilters": "Reset",
+    "copy": "Copy",
+    "copyUrl": "Copy subscription URL",
+    "importAnywhere": "Import to Anywhere",
+    "scanImport": "Scan to import",
+    "edit": "Edit",
+    "rotateToken": "Rotate token",
+    "resetTraffic": "Reset traffic",
+    "neverExpire": "Never expires",
+    "done": "Done",
+    "delete": "Delete"
+  },
+  "empty": {
+    "title": "No subscriptions",
+    "hint": "Create a subscription to publish existing Tunnels to Nowhere clients.",
+    "loading": "Loading subscriptions...",
+    "loadFailed": "Failed to load subscriptions",
+    "retry": "Retry"
+  },
+  "form": {
+    "createTitle": "Create Tunnel subscription",
+    "editTitle": "Edit Tunnel subscription",
+    "subtitle": "Content is generated dynamically from current Tunnel settings",
+    "namePlaceholder": "e.g. Nowhere global nodes",
+    "portalPlaceholder": "Select Tunnels to publish",
+    "selectedPortals": "{{count}} selected: {{names}}",
+    "availableTunnels": "Available Tunnels",
+    "selectedTunnels": "Selected Tunnels",
+    "selectedTunnelCount": "{{count}} selected",
+    "tunnelCount": "{{count}} Tunnels",
+    "searchTunnels": "Search Tunnels",
+    "selectAllAvailable": "Select all visible available Tunnels",
+    "selectAllSelected": "Select all visible selected Tunnels",
+    "noAvailableTunnels": "No Tunnels available",
+    "noSelectedTunnels": "No Tunnels selected",
+    "noTunnelResults": "No matching Tunnels",
+    "addSelectedTunnels": "Add selected Tunnels",
+    "addAllVisibleTunnels": "Add current filtered results",
+    "removeSelectedTunnels": "Remove selected Tunnels",
+    "removeAllVisibleTunnels": "Remove current filtered results",
+    "tunnelStatus": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "error": "Error",
+      "offline": "Offline"
+    },
+    "unlimited": "Leave blank for unlimited",
+    "noExpiry": "Leave blank for no expiry"
+  },
+  "validation": {
+    "name": "Enter a subscription name",
+    "portals": "Select at least one Tunnel",
+    "trafficLimit": "Traffic limit must be greater than 0"
+  },
+  "toast": {
+    "loadFailed": "Failed to load subscriptions",
+    "created": "Subscription created",
+    "updated": "Subscription updated",
+    "saveFailed": "Failed to save subscription",
+    "urlCopied": "Subscription URL copied",
+    "deleted": "Subscription deleted",
+    "rotated": "Token rotated",
+    "trafficReset": "Subscription traffic reset",
+    "actionFailed": "Subscription action failed"
+  },
+  "import": {
+    "title": "Subscription and import",
+    "vectorTitle": "Import node",
+    "outputPreferences": "Output configuration",
+    "outputPreferencesHint": "When expanded, mix Tunnels emit every valid TCP/UDP combination. Saving applies immediately to this subscription URL.",
+    "savePreferences": "Save configuration",
+    "preferencesSaved": "Output configuration updated",
+    "appDescription": "Official recommended client",
+    "action": "Import",
+    "methods": {
+      "label": "Choose an import client",
+      "anywhere": "Anywhere"
+    },
+    "unavailable": "This subscription does not have an available subscription URL.",
+    "vectorUnavailable": "This Tunnel does not have an available Vector address.",
+    "qrAlt": "Subscription address QR code",
+    "vectorQrAlt": "Vector address QR code",
+    "qrGenerating": "Generating QR code",
+    "qrError": "Unable to generate this QR code. Copy the address instead.",
+    "qrLead": "Import subscription by scanning",
+    "vectorQrLead": "Import Vector configuration by scanning",
+    "qrHint": "Scan in Anywhere or recognize the code from your photo library first; copy the subscription address only if needed.",
+    "vectorQrHint": "Scan in Anywhere or recognize the Vector address from your photo library.",
+    "qrStepOne": "Save the QR code on this screen.",
+    "qrStepTwo": "Complete the scan or import inside Anywhere.",
+    "copySubscriptionUrl": "Copy subscription address",
+    "copyVectorUrl": "Copy Vector address",
+    "copied": "Copied",
+    "toast": {
+      "copied": "Subscription address copied"
+    },
+    "vectorToast": {
+      "copied": "Vector address copied"
+    }
+  },
+  "confirm": {
+    "rotate": {
+      "title": "Rotate subscription token",
+      "message": "Rotating the token for “{{name}}” immediately invalidates the old subscription URL. Clients using it must import the new URL.",
+      "confirm": "Rotate token"
+    },
+    "reset": {
+      "title": "Reset subscription traffic",
+      "message": "Reset used traffic for “{{name}}” to zero and clear its over-limit state. The traffic limit is unchanged.",
+      "confirm": "Reset traffic"
+    },
+    "delete": {
+      "title": "Delete subscription",
+      "message": "Deleting “{{name}}” permanently invalidates its public subscription URL. Associated Tunnels are not deleted.",
+      "confirm": "Delete subscription"
+    }
+  }
+}

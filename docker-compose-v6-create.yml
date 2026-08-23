@@ -1,0 +1,41 @@
+services:
+  # Nowhere 应用 - 使用GitHub发布的镜像
+  nowheredash:
+    image: ghcr.io/nodepassproject/nowheredash:latest
+    container_name: nowheredash
+    ports:
+      - "4000:4000"  # Web UI + API (single port)
+    # environment:
+    #   - PORT=4000
+    #   - LOG-LEVEL=INFO
+    #   - TLS_CERT=/path/to/cert.pem
+    #   - TLS_KEY=/path/to/key.pem
+    #   - DISABLE_LOGIN=true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro 
+      # TLS certificates
+      # - /path/to/cert.pem:/path/to/cert.pem
+      # - /path/to/key.pem:/path/to/key.pem
+      # Persist data
+      - ./db:/app/db
+      # Persist file logs (optional but recommended)
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      app_net:
+        ipv6_address: fd00::10
+
+networks:
+  app_net:
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: fd00::/80
+          gateway: fd00::1

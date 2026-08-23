@@ -1,0 +1,101 @@
+import type { NavigateOptions } from "react-router-dom";
+
+import { HeroUIProvider } from "@heroui/system";
+import { ToastProvider } from "@heroui/toast";
+import { useHref, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { ThemeProvider } from "next-themes";
+import { I18nextProvider } from "react-i18next";
+
+import { AuthProvider } from "./components/auth/auth-provider";
+import { RouteGuard } from "./components/auth/route-guard";
+import { SettingsProvider } from "./components/providers/settings-provider";
+import { SetupGate } from "./components/setup/setup-gate";
+
+import i18n from "@/lib/i18n";
+
+declare module "@react-types/shared" {
+  interface RouterConfig {
+    routerOptions: NavigateOptions;
+  }
+}
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const [locale, setLocale] = useState(
+    i18n.resolvedLanguage || i18n.language || "zh-CN",
+  );
+
+  useEffect(() => {
+    const handleLanguageChange = (language: string) => setLocale(language);
+
+    i18n.on("languageChanged", handleLanguageChange);
+
+    return () => {
+      i18n.off("languageChanged", handleLanguageChange);
+    };
+  }, []);
+
+  // 全局 fetch 补丁：默认添加 credentials:'include'，确保跨端口请求携带 Cookie
+  // 使用单例模式避免重复补丁导致的内存泄漏
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // 检查是否已经应用了补丁，避免重复设置
+    if ((window as any)._fetchPatched) {
+      return;
+    }
+
+    const originalFetch = window.fetch;
+
+    window.fetch = (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const newInit: RequestInit = {
+        credentials: "include",
+        ...init,
+      };
+
+      return originalFetch(input, newInit);
+    };
+
+    // 标记已应用补丁
+    (window as any)._fetchPatched = true;
+    (window as any)._originalFetch = originalFetch;
+
+    return () => {
+      // 清理时恢复原始 fetch 并清除标记
+      if ((window as any)._fetchPatched && (window as any)._originalFetch) {
+        window.fetch = (window as any)._originalFetch;
+        (window as any)._fetchPatched = false;
+        delete (window as any)._originalFetch;
+      }
+    };
+  }, []); // 空依赖数组确保只执行一次
+
+  return (
+    <HeroUIProvider locale={locale} navigate={navigate} useHref={useHref}>
+      <ToastProvider
+        maxVisibleToasts={1}
+        placement="top-center"
+        toastOffset={80}
+      />
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        themes={["light", "dark", "system"]}
+      >
+        <I18nextProvider i18n={i18n}>
+          <SettingsProvider>
+            <SetupGate>
+              <AuthProvider>
+                <RouteGuard>{children}</RouteGuard>
+              </AuthProvider>
+            </SetupGate>
+          </SettingsProvider>
+        </I18nextProvider>
+      </ThemeProvider>
+    </HeroUIProvider>
+  );
+}

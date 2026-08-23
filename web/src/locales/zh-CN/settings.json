@@ -1,0 +1,726 @@
+{
+  "drawer": {
+    "title": "个性化设置",
+    "description": "自定义您的使用体验",
+    "theme": {
+      "title": "主题设置",
+      "description": "选择您喜欢的界面主题",
+      "label": "主题模式",
+      "light": "浅色主题",
+      "dark": "深色主题",
+      "system": "跟随系统"
+    },
+    "language": {
+      "title": "语言设置",
+      "description": "选择您的界面语言",
+      "label": "界面语言"
+    },
+    "navbar": {
+      "title": "导航栏样式",
+      "description": "选择顶部导航栏的展示方式",
+      "normal": "Normal",
+      "normalDesc": "使用当前左右分区导航布局",
+      "radioCenter": "Radio Center",
+      "radioCenterDesc": "使用居中悬浮胶囊导航布局",
+      "basicHeader": "Basic Header",
+      "basicHeaderDesc": "使用左侧品牌与分组胶囊导航布局",
+      "settingsLayout": "侧边栏布局",
+      "settingsLayoutDesc": "左侧固定导航，右侧展示页面内容"
+    },
+    "privacy": {
+      "title": "隐私模式",
+      "description": "保护您的隐私数据安全",
+      "label": "增强隐私保护功能",
+      "details": "隐藏敏感信息，限制数据收集，保护用户隐私"
+    },
+    "experimental": {
+      "title": "实验性功能",
+      "description": "尝鲜测试中的新特性",
+      "label": "启用实验性功能",
+      "details": "功能可能不稳定，谨慎在生产环境使用"
+    },
+    "updates": {
+      "title": "自动检查新版本",
+      "description": "管理软件更新检查策略",
+      "enable": "启用自动检查更新",
+      "enableDesc": "定期检查是否有新版本可用",
+      "frequency": "检查频率",
+      "daily": "每日",
+      "weekly": "每周",
+      "monthly": "每月",
+      "never": "从不",
+      "time": "检查时间",
+      "midnight": "午夜 (00:00)",
+      "morning": "早晨 (06:00)",
+      "noon": "中午 (12:00)",
+      "evening": "傍晚 (18:00)",
+      "night": "晚上 (22:00)",
+      "notifications": "更新通知",
+      "silentDownload": "静默下载"
+    },
+    "save": "保存设置",
+    "autoSave": "设置将自动保存到本地存储"
+  },
+  "system": {
+    "title": "系统设置",
+    "description": "自定义系统外观和行为偏好",
+    "form": {
+      "validation": {
+        "systemNameRequired": "系统名称不能为空"
+      },
+      "basicSettings": {
+        "title": "基础设置",
+        "systemName": "系统名称",
+        "systemNamePlaceholder": "输入系统名称",
+        "systemLanguage": "系统语言",
+        "zhCN": "简体中文",
+        "enUS": "English"
+      },
+      "performanceSettings": {
+        "title": "性能设置",
+        "maxConnections": {
+          "title": "最大连接数",
+          "description": "单个隧道允许的最大并发连接数"
+        },
+        "connectionTimeout": {
+          "title": "连接超时时间",
+          "description": "空闲连接的超时时间（秒）"
+        }
+      },
+      "logSettings": {
+        "title": "日志设置",
+        "logLevel": {
+          "title": "日志级别",
+          "description": "设置系统日志记录的详细程度"
+        },
+        "logRetentionDays": {
+          "title": "日志保留天数",
+          "description": "系统日志的保留时间"
+        }
+      },
+      "backupSettings": {
+        "title": "备份设置",
+        "autoBackup": {
+          "title": "自动备份",
+          "description": "定期备份系统配置和数据"
+        },
+        "backupInterval": {
+          "title": "备份周期",
+          "description": "自动备份的时间间隔",
+          "daily": "每天",
+          "weekly": "每周",
+          "monthly": "每月"
+        },
+        "backupRetention": {
+          "title": "保留备份数",
+          "description": "最多保留的备份文件数量"
+        }
+      }
+    },
+    "themeSettings": {
+      "title": "主题设置"
+    },
+    "languageSettings": {
+      "title": "语言设置",
+      "label": "界面语言"
+    },
+    "behaviorSettings": {
+      "title": "行为设置",
+      "autoSave": {
+        "title": "自动保存",
+        "description": "自动保存修改的配置和表单"
+      },
+      "autoUpdate": {
+        "title": "自动更新",
+        "description": "自动检查并提示更新"
+      },
+      "telemetry": {
+        "title": "遥测数据",
+        "description": "发送使用数据以帮助改进产品"
+      }
+    },
+    "actions": {
+      "reset": "重置",
+      "save": "保存更改"
+    }
+  },
+  "page": {
+    "tabs": {
+      "ariaLabel": "设置选项",
+      "security": "账户安全",
+      "logs": "存储清理",
+      "version": "关于系统"
+    },
+    "toast": {
+      "saveSuccess": "保存成功",
+      "saveSuccessDesc": "设置已更新",
+      "saveFailed": "保存失败",
+      "unknownError": "未知错误",
+      "resetSuccess": "重置成功",
+      "resetSuccessDesc": "设置已恢复默认值"
+    }
+  },
+  "auth": {
+    "title": "身份验证",
+    "description": "管理身份验证和 OAuth2 授权配置",
+    "loginMethods": {
+      "title": "登录方式",
+      "local": {
+        "title": "本地账号密码",
+        "description": "使用用户名和密码登录"
+      },
+      "github": {
+        "title": "GitHub OAuth",
+        "description": "使用 GitHub 账号登录"
+      },
+      "cloudflare": {
+        "title": "Cloudflare OAuth",
+        "description": "使用 Cloudflare 账号登录"
+      }
+    },
+    "oauth2Config": {
+      "title": "OAuth2 配置",
+      "clientId": "Client ID",
+      "clientIdPlaceholder": "请输入 OAuth2 Client ID",
+      "clientSecret": "Client Secret",
+      "clientSecretPlaceholder": "请输入 OAuth2 Client Secret"
+    },
+    "actions": {
+      "reset": "重置",
+      "save": "保存更改"
+    }
+  },
+  "profile": {
+    "title": "个人资料",
+    "description": "管理您的个人资料信息和账户设置",
+    "avatar": {
+      "title": "头像",
+      "description": "上传您的头像图片，建议使用正方形图片",
+      "uploadButton": "上传新头像",
+      "changeButton": "更换头像"
+    },
+    "fields": {
+      "username": "用户名",
+      "usernamePlaceholder": "输入用户名",
+      "displayName": "显示名称",
+      "displayNamePlaceholder": "输入显示名称",
+      "position": "职位",
+      "positionPlaceholder": "输入您的职位",
+      "email": "电子邮箱",
+      "emailPlaceholder": "输入电子邮箱",
+      "location": "所在地",
+      "locationPlaceholder": "输入您的所在地",
+      "bio": "个人简介",
+      "bioPlaceholder": "简单介绍一下自己",
+      "password": "修改密码",
+      "passwordPlaceholder": "输入新密码"
+    },
+    "actions": {
+      "reset": "重置",
+      "save": "保存更改"
+    }
+  },
+  "notifications": {
+    "alerts": {
+      "title": "告警设置",
+      "description": "配置系统告警阈值和触发条件",
+      "systemResources": {
+        "title": "系统资源告警",
+        "cpuUsage": {
+          "title": "CPU 使用率告警",
+          "description": "CPU 使用率超过阈值时告警"
+        },
+        "memoryUsage": {
+          "title": "内存使用率告警",
+          "description": "内存使用率超过阈值时告警"
+        },
+        "diskUsage": {
+          "title": "磁盘使用率告警",
+          "description": "磁盘使用率超过阈值时告警"
+        }
+      },
+      "security": {
+        "title": "安全告警",
+        "loginFailure": {
+          "title": "登录失败告警",
+          "description": "连续登录失败超过次数时告警",
+          "unit": "次"
+        },
+        "remoteLogin": {
+          "title": "异地登录告警",
+          "description": "检测到异地登录时告警"
+        },
+        "sensitiveOps": {
+          "title": "敏感操作告警",
+          "description": "执行敏感操作时告警"
+        }
+      }
+    },
+    "channels": {
+      "title": "通知渠道",
+      "description": "管理系统通知的发送渠道",
+      "addButton": "添加通知渠道",
+      "telegram": {
+        "title": "Telegram 通知",
+        "description": "通过 Telegram Bot 发送通知",
+        "botToken": "Bot Token",
+        "botTokenPlaceholder": "输入 Telegram Bot Token",
+        "chatId": "Chat ID",
+        "chatIdPlaceholder": "输入 Chat ID"
+      },
+      "wechat": {
+        "title": "企业微信通知",
+        "description": "通过企业微信机器人发送通知",
+        "webhookUrl": "Webhook URL",
+        "webhookUrlPlaceholder": "输入企业微信 Webhook URL"
+      },
+      "dingtalk": {
+        "title": "钉钉通知",
+        "description": "通过钉钉机器人发送通知",
+        "webhookUrl": "Webhook URL",
+        "webhookUrlPlaceholder": "输入钉钉 Webhook URL",
+        "secret": "安全密钥",
+        "secretPlaceholder": "输入安全密钥（可选）"
+      },
+      "webhook": {
+        "title": "Webhook 通知",
+        "description": "通过自定义 Webhook 发送通知",
+        "webhookUrl": "Webhook URL",
+        "webhookUrlPlaceholder": "输入 Webhook URL",
+        "method": "请求方法",
+        "headers": "请求头",
+        "headersPlaceholder": "输入 JSON 格式的请求头",
+        "template": "消息模板",
+        "templatePlaceholder": "输入 JSON 格式的消息模板"
+      },
+      "gotify": {
+        "title": "Gotify 通知",
+        "description": "通过 Gotify 服务发送通知",
+        "serverUrl": "服务器地址",
+        "serverUrlPlaceholder": "输入 Gotify 服务器地址",
+        "appToken": "应用令牌",
+        "appTokenPlaceholder": "输入应用令牌"
+      },
+      "testButton": "测试通知"
+    },
+    "groups": {
+      "title": "通知组",
+      "description": "管理通知接收组和接收人",
+      "addButton": "添加通知组",
+      "operations": {
+        "edit": "编辑",
+        "delete": "删除"
+      },
+      "opsTeam": {
+        "title": "运维团队",
+        "description": "接收系统运维相关的通知"
+      },
+      "securityTeam": {
+        "title": "安全团队",
+        "description": "接收安全相关的告警通知"
+      },
+      "addMember": "添加成员",
+      "members": {
+        "zhangsan": "张三",
+        "lisi": "李四",
+        "wangwu": "王五"
+      }
+    },
+    "rules": {
+      "title": "通知规则",
+      "description": "配置通知的触发规则和发送策略",
+      "addButton": "添加规则",
+      "systemAlerts": {
+        "title": "系统资源告警规则",
+        "description": "当系统资源超过阈值时通知运维团队"
+      },
+      "securityAlerts": {
+        "title": "安全事件告警规则",
+        "description": "发现安全事件时立即通知安全团队"
+      },
+      "fields": {
+        "triggerCondition": "触发条件",
+        "notificationGroup": "通知组",
+        "notificationChannel": "通知渠道"
+      },
+      "exampleConditions": {
+        "cpuMemory": "CPU > 80% 或 内存 > 90%",
+        "securityEvents": "检测到异常登录或敏感操作"
+      },
+      "exampleGroups": {
+        "ops": "运维团队",
+        "security": "安全团队"
+      },
+      "exampleChannels": {
+        "telegramWechat": "Telegram, 企业微信",
+        "telegramDingtalk": "Telegram, 钉钉"
+      },
+      "operations": {
+        "edit": "编辑",
+        "delete": "删除"
+      }
+    }
+  },
+  "security": {
+    "basic": {
+      "title": "基础安全设置",
+      "description": "管理账户基本安全信息"
+    },
+    "username": {
+      "title": "修改用户名",
+      "description": "更改您的登录用户名",
+      "button": "修改用户名",
+      "modalTitle": "修改用户名",
+      "label": "新用户名",
+      "placeholder": "请输入新用户名",
+      "cancel": "取消",
+      "confirm": "确认修改",
+      "submitting": "修改中..."
+    },
+    "password": {
+      "title": "修改密码",
+      "description": "定期更新密码以提高账户安全性",
+      "button": "修改密码",
+      "modalTitle": "修改密码",
+      "currentPassword": "当前密码",
+      "currentPasswordPlaceholder": "请输入当前密码",
+      "newPassword": "新密码",
+      "newPasswordPlaceholder": "请输入新密码",
+      "confirmPassword": "确认新密码",
+      "confirmPasswordPlaceholder": "请再次输入新密码",
+      "requirements": {
+        "minLength": "• 密码长度至少为6位",
+        "recommended": "• 建议包含字母、数字和特殊字符"
+      },
+      "cancel": "取消",
+      "confirm": "确认修改",
+      "submitting": "修改中..."
+    },
+    "oauth2": {
+      "title": "OAuth2 认证",
+      "description": "系统仅允许绑定一种第三方登录方式",
+      "bound": "已绑定",
+      "configure": "配置",
+      "unbind": "解绑",
+      "notBound": "尚未绑定任何 OAuth2 登录方式",
+      "bindButton": "绑定 OAuth2 认证",
+      "selectProvider": "选择 OAuth2 提供商",
+      "github": {
+        "title": "GitHub OAuth2 配置",
+        "clientId": "Client ID",
+        "clientIdPlaceholder": "GitHub OAuth App Client ID",
+        "clientSecret": "Client Secret",
+        "clientSecretPlaceholder": "GitHub OAuth App Client Secret",
+        "cancel": "取消",
+        "save": "保存配置"
+      },
+      "cloudflare": {
+        "title": "Cloudflare OAuth2 配置",
+        "clientId": "Client ID",
+        "clientIdPlaceholder": "Cloudflare OAuth App Client ID",
+        "clientSecret": "Client Secret",
+        "clientSecretPlaceholder": "Cloudflare OAuth App Client Secret",
+        "authUrl": "Auth URL",
+        "authUrlPlaceholder": "Cloudflare Access Auth URL",
+        "tokenUrl": "Token URL",
+        "tokenUrlPlaceholder": "Cloudflare Access Token URL",
+        "userInfoUrl": "User Info URL",
+        "userInfoUrlPlaceholder": "Cloudflare Access User Info URL",
+        "cancel": "取消",
+        "save": "保存配置"
+      }
+    },
+    "toast": {
+      "validationFailed": "表单验证失败",
+      "fillAllFields": "请填写所有密码字段",
+      "passwordMismatch": "密码不匹配",
+      "passwordMismatchDesc": "新密码和确认密码不一致",
+      "passwordTooShort": "密码太短",
+      "passwordTooShortDesc": "新密码长度至少为6位",
+      "passwordChangeSuccess": "密码修改成功",
+      "passwordChangeSuccessDesc": "您的密码已成功更新",
+      "passwordChangeFailed": "密码修改失败",
+      "checkCurrentPassword": "请检查您的当前密码是否正确",
+      "networkError": "网络错误",
+      "checkConnection": "请检查网络连接后重试",
+      "fillUsername": "请填写新用户名",
+      "usernameChangeSuccess": "用户名修改成功",
+      "usernameChangeSuccessDesc": "您的用户名已成功更新",
+      "usernameChangeFailed": "用户名修改失败",
+      "usernameChangeError": "修改用户名时发生错误",
+      "configSaveSuccess": "配置保存成功",
+      "githubConfigSaved": "GitHub OAuth2 配置已成功保存",
+      "cloudflareConfigSaved": "Cloudflare OAuth2 配置已成功保存",
+      "configSaveFailed": "保存失败",
+      "githubConfigError": "保存 GitHub OAuth2 配置时发生错误",
+      "cloudflareConfigError": "保存 Cloudflare OAuth2 配置时发生错误",
+      "unbindSuccess": "解绑成功",
+      "unbindSuccessDesc": "已成功解绑 OAuth2 登录方式",
+      "unbindFailed": "解绑失败",
+      "unbindError": "操作时发生错误"
+    }
+  },
+  "logs": {
+    "stats": {
+      "title": "文件日志统计",
+      "description": "当前文件日志清理状态",
+      "refresh": "刷新数据",
+      "status": "清理状态",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "autoCleanup": "自动清理",
+      "fileCount": "日志文件数",
+      "fileCountUnit": "文件数量",
+      "fileSize": "日志文件大小",
+      "diskUsage": "磁盘占用",
+      "noData": "无法获取统计数据"
+    },
+    "config": {
+      "title": "文件日志清理",
+      "description": "管理运行日志文件的自动清理规则",
+      "configureButton": "配置清理规则",
+      "configureShort": "配置",
+      "manualCleanup": "手动清理",
+      "manualCleanupShort": "清理",
+      "retentionDays": "保留天数",
+      "retentionDaysUnit": "天",
+      "cleanupInterval": "清理间隔",
+      "maxRecordsPerDay": "每日最大记录数",
+      "unlimited": "无限制",
+      "autoCleanupStatus": "自动清理状态",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "hint": "💡 日志清理说明：",
+      "hintDesc": "系统会定期清理超过保留天数的运行日志文件，控制日志目录的磁盘占用。清理任务会自动在后台执行，也可以手动触发清理。",
+      "noData": "无法获取配置数据"
+    },
+    "modal": {
+      "title": "配置日志清理规则",
+      "enableAutoCleanup": "启用自动清理",
+      "enableAutoCleanupDesc": "开启后将按照配置规则定期清理过期日志",
+      "retentionDays": "日志保留天数",
+      "retentionDaysDesc": "超过此天数的数据库事件将被删除",
+      "cleanupInterval": "清理间隔",
+      "cleanupIntervalDesc": "清理任务执行间隔，格式如: 24h, 12h, 6h",
+      "cleanupIntervalPlaceholder": "24h",
+      "maxRecordsPerDay": "每日最大记录数",
+      "maxRecordsPerDayDesc": "每个端点每天保留的最大数据库事件记录数，0表示无限制",
+      "warning": "⚠️ 注意：",
+      "warningDesc": "日志清理功能会影响系统日志的保留时间，清理后的日志无法恢复。建议根据实际需要合理设置保留天数。",
+      "cancel": "取消",
+      "save": "保存配置"
+    },
+    "toast": {
+      "statsFailed": "获取统计失败",
+      "statsFailedDesc": "无法获取日志统计信息",
+      "networkError": "网络错误",
+      "statsNetworkError": "获取日志统计信息失败，请检查网络连接",
+      "configFailed": "获取配置失败",
+      "configFailedDesc": "无法获取清理配置",
+      "configNetworkError": "获取清理配置失败，请检查网络连接",
+      "refreshSuccess": "刷新成功",
+      "refreshSuccessDesc": "统计数据已更新",
+      "updateSuccess": "配置更新成功",
+      "updateSuccessDesc": "日志清理配置已保存",
+      "updateFailed": "更新失败",
+      "updateFailedDesc": "配置更新失败",
+      "updateNetworkError": "配置更新失败，请检查网络连接",
+      "cleanupStarted": "清理任务已启动",
+      "cleanupStartedDesc": "日志清理将在后台执行，请稍候查看统计数据",
+      "cleanupFailed": "启动清理失败",
+      "cleanupFailedDesc": "无法启动清理任务",
+      "cleanupNetworkError": "启动清理任务失败，请检查网络连接"
+    },
+    "loading": "加载日志清理设置..."
+  },
+  "historyCleanup": {
+    "title": "数据库历史清理",
+    "description": "管理流量明细、统计汇总和操作记录的保留周期",
+    "loading": "正在读取数据库清理设置...",
+    "status": {
+      "running": "正在清理",
+      "error": "上次清理失败",
+      "enabled": "自动清理已启用",
+      "disabled": "自动清理已停用"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "save": "保存策略",
+      "preview": "预览清理",
+      "cancel": "取消",
+      "cleanupNow": "立即清理"
+    },
+    "overview": {
+      "title": "数据库状态",
+      "driver": "数据库",
+      "databaseSize": "数据库大小",
+      "reusableSpace": "可复用空间",
+      "schedule": "每日执行时间",
+      "lastCleanup": "上次完成时间",
+      "never": "暂无"
+    },
+    "compaction": {
+      "title": "建议停服压缩 SQLite 数据库",
+      "description": "当前有 {{size}} 可复用空间，已超过 256 MB 提示阈值。请先停止 NowhereDash 并备份数据库，再按照操作文档执行压缩。",
+      "action": "查看操作文档"
+    },
+    "config": {
+      "title": "保留策略",
+      "description": "各类历史数据会按批次清理，避免长时间占用数据库写入。",
+      "autoCleanup": "自动清理",
+      "serviceHistory": "服务历史明细",
+      "serviceHistoryDesc": "允许设置 2 至 30 天",
+      "summary": "隧道小时汇总",
+      "summaryDesc": "允许设置 8 至 3650 天",
+      "dashboard": "全局小时汇总",
+      "dashboardDesc": "允许设置 1 至 3650 天",
+      "operationLog": "隧道操作记录",
+      "operationLogDesc": "允许设置 1 至 3650 天",
+      "days": "天",
+      "executionPlan": "每天 {{time}} 执行，每批最多 {{count}} 条",
+      "saveBeforePreview": "保存当前更改后才能预览"
+    },
+    "validation": {
+      "serviceHistory": "请输入 2 至 30 之间的整数",
+      "summary": "请输入 8 至 3650 之间的整数",
+      "dashboard": "请输入 1 至 3650 之间的整数",
+      "operationLog": "请输入 1 至 3650 之间的整数"
+    },
+    "stats": {
+      "title": "历史数据概览",
+      "description": "过期数量按当前已保存的保留策略计算",
+      "table": "数据表",
+      "total": "总记录数",
+      "expired": "已过期",
+      "oldest": "最早记录",
+      "retention": "保留周期",
+      "retentionValue": "{{days}} 天",
+      "noData": "暂无可用的历史数据统计"
+    },
+    "tables": {
+      "serviceHistory": "服务历史明细",
+      "hourlySummary": "隧道小时汇总",
+      "dashboardSummary": "全局小时汇总",
+      "operationLogs": "隧道操作记录",
+      "endpointEvents": "端点事件"
+    },
+    "preview": {
+      "title": "确认清理范围",
+      "total": "预计删除 {{count}} 条过期记录",
+      "warning": "删除后无法恢复。实际删除数量可能因持续写入而略有变化。",
+      "noExpired": "当前没有需要清理的过期记录"
+    },
+    "errors": {
+      "title": "数据库清理异常",
+      "load": "无法读取数据库清理设置",
+      "refresh": "无法刷新数据库清理状态",
+      "save": "无法保存数据库清理策略",
+      "preview": "无法生成清理预览",
+      "trigger": "无法启动数据库清理",
+      "busy": "数据库清理任务正在运行"
+    },
+    "toast": {
+      "refreshed": "数据已刷新",
+      "refreshedDesc": "数据库状态和保留策略已更新",
+      "refreshFailed": "刷新失败",
+      "saved": "保留策略已保存",
+      "savedDesc": "新的清理规则将在下次任务中生效",
+      "saveFailed": "保存失败",
+      "previewFailed": "预览失败",
+      "cleanupStarted": "清理任务已启动",
+      "cleanupStartedDesc": "任务将在后台分批处理过期记录",
+      "cleanupCompleted": "清理任务已完成",
+      "cleanupCompletedDesc": "历史数据统计已更新",
+      "cleanupFailed": "清理任务失败"
+    }
+  },
+  "version": {
+    "title": "版本更新",
+    "description": "检查并管理系统版本",
+    "current": {
+      "title": "版本信息",
+      "current": "当前",
+      "stable": "稳定版",
+      "beta": "测试版",
+      "system": "系统",
+      "checkUpdate": "检查更新"
+    },
+    "deployment": {
+      "title": "部署环境",
+      "docker": "Docker 部署",
+      "binary": "二进制部署",
+      "autoUpdateStable": "自动更新稳定版",
+      "autoUpdateBeta": "自动更新测试版",
+      "manualUpdate": "手动更新",
+      "dockerDetails": "Docker 环境支持自动更新：下载新版本二进制并替换后退出进程，依赖容器 restart 策略自动重启",
+      "dockerManualDetails": "Docker 环境推荐通过宿主机执行更新命令，以确保更新过程稳定可靠",
+      "dockerRestartHint": "需要容器配置 restart: unless-stopped/always，或使用 systemd / supervisor 等系统级 restart 策略，否则进程退出后不会自动重启",
+      "binaryDetails": "将下载最新二进制文件并自动替换，退出后依赖系统级 restart 策略 (systemd Restart=always / supervisor 等) 拉起新版本",
+      "binaryRestartHint": "若未配置 systemd / supervisor 等进程守护，进程退出后需手动重新启动",
+      "unknownDetails": "建议查看更新说明进行手动更新"
+    },
+    "updateInstructions": {
+      "title": "更新说明：",
+      "docker": {
+        "desc": "在 Docker 宿主机上执行以下命令：",
+        "pull": "# 拉取最新镜像",
+        "restart": "# 重启容器"
+      },
+      "binary": {
+        "auto": "点击上方按钮即可自动更新",
+        "autoDesc": "程序会自动下载、停止、替换和重启",
+        "manual": "或手动更新：从 GitHub 下载→停止程序→替换文件→重启"
+      }
+    },
+    "modal": {
+      "title": "版本更新详情",
+      "prerelease": "(测试版)",
+      "publishedAt": "发布于",
+      "close": "关闭",
+      "viewDetails": "查看详情"
+    },
+    "alert": {
+      "updateStarted": "更新已开始: {{message}}\n\n程序将在几秒钟后自动重启，请稍等...",
+      "updateFailed": "更新失败: {{error}}"
+    },
+    "db": {
+      "title": "数据库信息",
+      "description": "当前数据库的运行状态与基本信息",
+      "refresh": "刷新",
+      "driver": "数据库类型",
+      "size": "数据库大小",
+      "tables": "{{count}} 张数据表",
+      "location": "存储位置",
+      "host": "数据库主机",
+      "walOn": "启用",
+      "walOff": "关闭",
+      "noData": "暂无数据库信息"
+    }
+  },
+  "update": {
+    "chipHasUpdate": "新版本",
+    "chipUpdating": "更新中",
+    "chipPendingRestart": "待重启",
+    "chipTooltipHasUpdate": "发现新版本 {{version}}，点击查看",
+    "chipTooltipUpdating": "正在更新...",
+    "chipTooltipPendingRestart": "更新已完成，点击重启以应用",
+    "chipTooltipRestarting": "正在重启服务...",
+    "timeout": "更新超时，请查看服务器日志",
+    "popover": {
+      "currentVersion": "当前版本",
+      "refresh": "重新检查",
+      "latestVersion": "最新版本: {{version}}",
+      "noLatest": "尚未检查",
+      "upToDate": "已是最新版本",
+      "updateAvailable": "有新版本可用！",
+      "updateComplete": "更新完成",
+      "restartHint": "请重启服务以应用更新",
+      "updateNow": "立即更新",
+      "updating": "正在更新...",
+      "restartNow": "立即重启",
+      "restarting": "正在重启... ({{seconds}}s)",
+      "releaseNotes": "查看更新日志",
+      "error": "更新失败"
+    }
+  }
+}

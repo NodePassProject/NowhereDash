@@ -1,0 +1,91 @@
+.git
+.gitignore
+README.md
+LICENSE
+
+# Node / Next
+node_modules
+.pnpm-store
+.next
+out
+dist
+
+# 旧构建产物
+web/dist
+
+# 本地调试文件
+*.log
+npm-debug.log*
+yarn-debug.log*
+.pnpm-debug.log*
+
+# IDE
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Go
+*.exe
+*.test
+bin/
+
+# Docker
+nowhere-release.*
+
+# 开发文件
+.env*
+.github
+.editorconfig
+.eslintrc*
+.prettierrc*
+.md
+
+# 测试文件
+__tests__
+*.test.*
+*.spec.*
+
+# 日志和缓存
+logs
+.cache
+.npm
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 构建输出
+build/
+
+# 环境变量文件
+!.env.example
+
+# 运行时文件
+*.pid
+*.lock
+
+# 数据库
+*.db
+*.sqlite
+data/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 文档
+DOCKER_SETUP.md
+CONFIG.md
+
+# 测试
+coverage/
+.nyc_output/
+
+# 临时文件
+tmp/
+temp/ 
+docs/
+/dev/
+

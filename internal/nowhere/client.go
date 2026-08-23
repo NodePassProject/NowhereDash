@@ -1,0 +1,501 @@
+package nowhere
+
+import (
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"NowhereDash/internal/models"
+
+	"github.com/go-resty/resty/v2"
+)
+
+// 创建 Resty 客户端，配置禁用代理和证书校验
+func createRestyClient() *resty.Client {
+	client := resty.New().
+		SetTimeout(15 * time.Second).
+		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+
+	// 明确禁用所有代理设置
+	client.SetProxy("")
+	client.RemoveProxy()
+
+	return client
+}
+
+// request 执行 HTTP 请求的通用方法，使用 Resty 客户端
+func request(method, url, apiKey string, body interface{}, dest interface{}) error {
+	client := createRestyClient()
+	req := client.R().
+		SetHeader("X-API-Key", apiKey)
+
+	// 设置请求体
+	if body != nil {
+		req.SetBody(body)
+	}
+
+	// 设置响应结构
+	if dest != nil {
+		req.SetResult(dest)
+	}
+
+	// 执行请求
+	var resp *resty.Response
+	var err error
+
+	switch method {
+	case "GET":
+		resp, err = req.Get(url)
+	case "POST":
+		resp, err = req.Post(url)
+	case "PUT":
+		resp, err = req.Put(url)
+	case "PATCH":
+		resp, err = req.Patch(url)
+	case "DELETE":
+		resp, err = req.Delete(url)
+	default:
+		return fmt.Errorf("不支持的 HTTP 方法: %s", method)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode() < 200 || resp.StatusCode() >= 300 {
+		return fmt.Errorf("Nowhere API 返回错误: %d", resp.StatusCode())
+	}
+
+	return nil
+}
+
+// GetInstances 获取所有隧道实例列表
+func GetInstances(endpointID int64) ([]InstanceResult, error) {
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+	// 创建临时客户端来执行请求
+	var resp []InstanceResult
+	if err := request("GET", fmt.Sprintf("%s/instances", baseURL), apiKey, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// GetInstance 获取指定实例信息
+func GetInstance(endpointID int64, instanceID string) (*InstanceResult, error) {
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+	var resp InstanceResult
+	if err := request("GET", fmt.Sprintf("%s/instances/%s", baseURL, instanceID), apiKey, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CreateInstance 创建隧道实例，返回实例 ID 与状态(running/stopped 等)
+func CreateInstance(endpointID int64, commandLine string) (InstanceResult, error) {
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+
+	payload := map[string]string{"url": commandLine}
+
+	var resp InstanceResult
+	if err := request("POST", fmt.Sprintf("%s/instances", baseURL), apiKey, payload, &resp); err != nil {
+		return resp, err
+	}
+	return resp, nil
+}
+
+// DeleteInstance 删除指定实例
+func DeleteInstance(endpointID int64, instanceID string) error {
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+	return request("DELETE", fmt.Sprintf("%s/instances/%s", baseURL, instanceID), apiKey, nil, nil)
+}
+
+// UpdateInstance 更新指定实例的命令行 (PUT /instances/{id})
+func UpdateInstance(endpointID int64, instanceID, commandLine string) (InstanceResult, error) {
+	payload := map[string]string{"url": commandLine}
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+	var resp InstanceResult
+	if err := request("PUT", fmt.Sprintf("%s/instances/%s", baseURL, instanceID), apiKey, payload, &resp); err != nil {
+		return resp, err
+	}
+	return resp, nil
+}
+
+// ControlInstance 对实例执行 start/stop/restart 操作，返回最新状态
+func PatchInstance(endpointID int64, instanceID string, body patchBody) (InstanceResult, error) {
+	var resp InstanceResult
+
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+	if err := request("PATCH", fmt.Sprintf("%s/instances/%s", baseURL, instanceID), apiKey, body, &resp); err != nil {
+		return resp, err
+	}
+	return resp, nil
+}
+
+// ControlInstance 对实例执行 start/stop/restart 操作，返回最新状态
+func ControlInstance(endpointID int64, instanceID, action string) (InstanceResult, error) {
+	body := patchBody{
+		Action: &action,
+	}
+	return PatchInstance(endpointID, instanceID, body)
+}
+
+// ConvertInstanceTagsToTagsMap 将InstanceTag数组转换为map[string]string
+func ConvertInstanceTagsToTagsMap(instanceTags []InstanceTag) (*map[string]string, error) {
+	if len(instanceTags) == 0 {
+		return nil, nil
+	}
+
+	// 转换为map
+	tagsMap := make(map[string]string)
+	for _, tag := range instanceTags {
+		tagsMap[tag.Key] = tag.Value
+	}
+
+	return &tagsMap, nil
+}
+
+// PatchInstance 更新指定实例的别名 (PATCH /instances/{id})
+func RenameInstance(endpointID int64, instanceID string, name string) (InstanceResult, error) {
+	body := patchBody{
+		Alias: &name,
+	}
+	return PatchInstance(endpointID, instanceID, body)
+}
+
+// PatchInstance 更新指定实例的重启策略 (PATCH /instances/{id})
+func SetRestartInstance(endpointID int64, instanceID string, restart bool) (InstanceResult, error) {
+	body := patchBody{
+		Restart: &restart,
+	}
+	return PatchInstance(endpointID, instanceID, body)
+}
+
+// ResetInstanceTraffic 重置指定实例的流量统计 (PATCH /instances/{id})
+func ResetTraffic(endpointID int64, instanceID string) (InstanceResult, error) {
+	action := "reset"
+	body := patchBody{
+		Action: &action,
+	}
+	return PatchInstance(endpointID, instanceID, body)
+}
+
+// UpdateInstanceTags 更新指定实例的标签 (PATCH /instances/{id})
+func UpdateInstanceTags(endpointID int64, instanceID string, tags map[string]string) (InstanceResult, error) {
+	instance, err := GetInstance(endpointID, instanceID)
+	if err != nil {
+		return InstanceResult{}, err
+	}
+	var peer *models.Peer
+	if instance.Meta != nil {
+		peer = instance.Meta.Peer
+	}
+	return UpdateInstanceMetadata(endpointID, instanceID, &tags, peer)
+}
+
+// UpdateInstancePeers 更新指定实例的对端信息 (PATCH /instances/{id})
+func UpdateInstancePeers(endpointID int64, instanceID string, peer *models.Peer) (InstanceResult, error) {
+	instance, err := GetInstance(endpointID, instanceID)
+	if err != nil {
+		return InstanceResult{}, err
+	}
+	var tags *map[string]string
+	if instance.Meta != nil {
+		tags = instance.Meta.Tags
+	}
+	return UpdateInstanceMetadata(endpointID, instanceID, tags, peer)
+}
+
+// UpdateInstanceMetadata updates peer and tags together so one metadata field
+// cannot be lost while the other is edited.
+func UpdateInstanceMetadata(endpointID int64, instanceID string, tags *map[string]string, peer *models.Peer) (InstanceResult, error) {
+	body := patchBody{
+		Meta: &Meta{
+			Peer: peer,
+			Tags: tags,
+		},
+	}
+	return PatchInstance(endpointID, instanceID, body)
+}
+
+// GetInfo 获取Nowhere实例的系统信息
+func GetInfo(endpointID int64) (*EndpointInfoResult, error) {
+	var resp EndpointInfoResult
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+
+	// 创建临时客户端来执行请求
+
+	if err := request("GET", fmt.Sprintf("%s/info", baseURL), apiKey, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// TCPing 执行TCP连接测试，检测目标地址的连通性和延迟
+// target 参数格式为 host:port，例如 "example.com:80"
+// 进行5次测试并返回统计信息
+func TCPing(endpointID int64, target string) (*TCPingResult, error) {
+	const testCount = 5
+
+	result := &TCPingResult{
+		Target:          target,
+		TotalTests:      testCount,
+		SuccessfulTests: 0,
+		PacketLoss:      0.0,
+	}
+
+	var latencies []int64
+	var errors []string
+
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+
+	// 进行5次测试
+	for i := 0; i < testCount; i++ {
+
+		// 单次测试结果结构
+		var singleResult struct {
+			Target    string `json:"target"`
+			Connected bool   `json:"connected"`
+			Latency   int64  `json:"latency"`
+			Error     string `json:"error"`
+		}
+
+		// 使用超时客户端进行请求
+		if err := request("GET", fmt.Sprintf("%s/tcping?target=%s", baseURL, target), apiKey, nil, &singleResult); err != nil {
+			// 网络请求失败或超时，算作丢包
+			errors = append(errors, err.Error())
+			continue
+		}
+
+		if singleResult.Connected {
+			// 连接成功
+			result.SuccessfulTests++
+			latencies = append(latencies, singleResult.Latency)
+		} else {
+			// 连接失败
+			if singleResult.Error != "" {
+				errors = append(errors, singleResult.Error)
+			} else {
+				errors = append(errors, "连接失败")
+			}
+		}
+
+		// 避免测试过于频繁，间隔100ms
+		if i < testCount-1 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// 计算统计信息
+	if result.SuccessfulTests > 0 {
+		result.Connected = true
+
+		// 计算延迟统计
+		var sum int64
+		minLat := latencies[0]
+		maxLat := latencies[0]
+
+		for _, lat := range latencies {
+			sum += lat
+			if lat < minLat {
+				minLat = lat
+			}
+			if lat > maxLat {
+				maxLat = lat
+			}
+		}
+
+		result.MinLatency = &minLat
+		result.MaxLatency = &maxLat
+		avgLat := float64(sum) / float64(len(latencies))
+		result.AvgLatency = &avgLat
+		result.Latency = minLat // 保持兼容性，使用最快响应时间
+
+	} else {
+		// 全部失败时仍然返回基本信息，延迟字段设为nil
+		result.Connected = false
+		result.MinLatency = nil
+		result.MaxLatency = nil
+		result.AvgLatency = nil
+		result.Latency = 0
+		// 不设置Error字段，前端不显示错误信息
+	}
+
+	// 计算丢包率
+	result.PacketLoss = float64(testCount-result.SuccessfulTests) / float64(testCount) * 100.0
+
+	return result, nil
+}
+
+// SingleTCPing 执行单次TCPing测试，用于网络诊断
+func SingleTCPing(endpointID int64, target string) (*NetworkDebugResult, error) {
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+	timestamp := time.Now().UnixMilli()
+
+	// 单次测试结果结构
+	var singleResult struct {
+		Target    string `json:"target"`
+		Connected bool   `json:"connected"`
+		Latency   int64  `json:"latency"`
+		Error     string `json:"error"`
+	}
+
+	// 使用超时客户端进行请求
+	if err := request("GET", fmt.Sprintf("%s/tcping?target=%s", baseURL, target), apiKey, nil, &singleResult); err != nil {
+		// 网络请求失败或超时
+		return &NetworkDebugResult{
+			Timestamp: timestamp,
+			Success:   false,
+			Latency:   0,
+			Error:     err.Error(),
+		}, nil
+	}
+
+	// 返回匹配前端期望的结构
+	return &NetworkDebugResult{
+		Timestamp: timestamp,
+		Success:   singleResult.Connected,
+		Latency:   singleResult.Latency,
+		Error:     singleResult.Error,
+	}, nil
+}
+
+// TestConnection 测试端点连接
+func TestConnection(endpointID int64) error {
+	baseURL, apiKey, _ := GetCache().Get(fmt.Sprintf("%d", endpointID))
+
+	// 测试获取实例列表以验证连接
+	err := request("GET", fmt.Sprintf("%s/instances", baseURL), apiKey, nil, nil)
+	return err
+}
+
+// InstanceTag represents a key-value pair for tagging instances
+type InstanceTag struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+//go:generate stringer -type=Instance
+type InstanceResult struct {
+	ID      string  `json:"id"`
+	Type    string  `json:"type"`   // portal
+	Status  string  `json:"status"` // running|stopped|error
+	URL     string  `json:"url"`
+	TCPRx   int64   `json:"tcprx"` // 字节（Bytes）为单位
+	TCPTx   int64   `json:"tcptx"` // 字节（Bytes）为单位
+	UDPRx   int64   `json:"udprx"` // 字节（Bytes）为单位
+	UDPTx   int64   `json:"udptx"` // 字节（Bytes）为单位
+	Pool    *int64  `json:"pool,omitempty"`
+	Ping    *int64  `json:"ping,omitempty"`
+	Alias   *string `json:"alias,omitempty"`
+	Restart *bool   `json:"restart,omitempty"`
+	TCPs    *int64  `json:"tcps,omitempty"`
+	UDPs    *int64  `json:"udps,omitempty"`
+	Meta    *Meta   `json:"meta,omitempty"`
+	Config  *string `json:"config,omitempty"`
+}
+
+// UnmarshalJSON accepts the canonical OpenCtrl config field and older naming
+// variants emitted by compatible controllers. The canonical field always
+// wins when more than one is present.
+func (result *InstanceResult) UnmarshalJSON(data []byte) error {
+	type instanceResultAlias InstanceResult
+	var decoded instanceResultAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(decoded.URL) == "" || decoded.Config == nil || strings.TrimSpace(*decoded.Config) == "" {
+		var aliases struct {
+			CommandURLSnake string  `json:"command_url"`
+			CommandURLLower string  `json:"commandUrl"`
+			CommandURLUpper string  `json:"commandURL"`
+			ConfigURLSnake  *string `json:"config_url"`
+			ConfigURLLower  *string `json:"configUrl"`
+			ConfigURLUpper  *string `json:"configURL"`
+		}
+		if err := json.Unmarshal(data, &aliases); err != nil {
+			return err
+		}
+		if strings.TrimSpace(decoded.URL) == "" {
+			for _, candidate := range []string{aliases.CommandURLUpper, aliases.CommandURLLower, aliases.CommandURLSnake} {
+				if strings.TrimSpace(candidate) != "" {
+					decoded.URL = strings.TrimSpace(candidate)
+					break
+				}
+			}
+		}
+		if decoded.Config == nil || strings.TrimSpace(*decoded.Config) == "" {
+			for _, candidate := range []*string{aliases.ConfigURLUpper, aliases.ConfigURLLower, aliases.ConfigURLSnake} {
+				if candidate != nil && strings.TrimSpace(*candidate) != "" {
+					value := strings.TrimSpace(*candidate)
+					decoded.Config = &value
+					break
+				}
+			}
+		}
+	}
+
+	*result = InstanceResult(decoded)
+	return nil
+}
+
+type Meta struct {
+	Peer *models.Peer       `json:"peer,omitempty"`
+	Tags *map[string]string `json:"tags,omitempty"`
+}
+
+type patchBody struct {
+	Restart *bool   `json:"restart,omitempty"`
+	Action  *string `json:"action,omitempty"` // start|stop|restart|reset
+	Alias   *string `json:"alias,omitempty"`
+	Meta    *Meta   `json:"meta,omitempty"` // 实例标签
+}
+
+// EndpointInfoResult Nowhere实例的系统信息
+type EndpointInfoResult struct {
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+	Ver       string `json:"ver"`
+	Name      string `json:"name"`
+	Log       string `json:"log"`
+	TLS       string `json:"tls"`
+	Crt       string `json:"crt"`
+	Key       string `json:"key"`
+	CPU       int    `json:"cpu"`        // CPU核心使用百分比
+	MemUsed   int64  `json:"mem_used"`   // 已使用内存(字节)
+	MemTotal  int64  `json:"mem_total"`  // 总内存(字节)
+	SwapUsed  int64  `json:"swap_used"`  // 已使用交换空间(字节)
+	SwapTotal int64  `json:"swap_total"` // 总交换空间(字节)
+	DiskRead  int64  `json:"diskr"`      // 磁盘读取字节数
+	DiskWrite int64  `json:"diskw"`      // 磁盘写入字节数
+	NetRx     int64  `json:"netrx"`      // 网络接收字节数
+	NetTx     int64  `json:"nettx"`      // 网络发送字节数
+	SysUptime int64  `json:"sysup"`      // 系统运行时间(秒)
+	Uptime    int64  `json:"uptime"`     // Nowhere运行时间(秒)
+	Alias     string `json:"alias"`      // 端点别名
+}
+
+// TCPingResult 表示TCP连接测试的结果
+type TCPingResult struct {
+	Target    string `json:"target"`
+	Connected bool   `json:"connected"`
+	Latency   int64  `json:"latency"` // 延迟时间，单位毫秒（保持兼容性）
+	Error     string `json:"error"`   // 错误信息，连接成功时为null
+	// 新增字段 - 5次测试统计
+	TotalTests      int      `json:"totalTests"`      // 总测试次数
+	SuccessfulTests int      `json:"successfulTests"` // 成功测试次数
+	MinLatency      *int64   `json:"minLatency"`      // 最快响应时间（毫秒）
+	MaxLatency      *int64   `json:"maxLatency"`      // 最慢响应时间（毫秒）
+	AvgLatency      *float64 `json:"avgLatency"`      // 平均响应时间（毫秒）
+	PacketLoss      float64  `json:"packetLoss"`      // 丢包率（百分比）
+}
+
+// NetworkDebugResult 网络诊断结果（简单版本）
+type NetworkDebugResult struct {
+	Timestamp int64  `json:"timestamp"`
+	Success   bool   `json:"success"`
+	Latency   int64  `json:"latency"`
+	Error     string `json:"error"`
+}

@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+    branches: [ main ]
+
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    
+    # 过滤掉 beta 标签
+    if: ${{ !contains(github.ref, 'beta') }}
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'web/pnpm-lock.yaml'
+
+      - name: 🏗️ 构建前端并准备嵌入
+        run: |
+          echo "📦 安装前端依赖..."
+          cd web
+          pnpm install --frozen-lockfile
+          
+          echo "🏗️ 构建前端静态文件..."
+          pnpm build
+          
+          echo "📁 验证构建结果:"
+          ls -la ../cmd/server/dist/
+          
+          echo "✅ 前端构建完成，文件已输出到 cmd/server/dist/"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # 改用 modernc.org/sqlite (纯 Go) 后,所有目标平台都走 CGO_ENABLED=0 交叉编译,
+      # 不再需要 mingw / gcc-aarch64-linux-gnu / gcc-arm-linux-gnueabihf 等 C 工具链。
+
+      - name: 📝 获取版本信息
+        id: get_version
+        run: |
+          # 从 web/package.json 获取版本号
+          VERSION=$(node -p "require('./web/package.json').version")
+          echo "📦 Package.json version: $VERSION"
+          
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # 标签触发
+            TAG_VERSION=${GITHUB_REF#refs/tags/v}
+            echo "🏷️ Tag version: $TAG_VERSION"
+            
+            # 检查版本一致性
+            if [ "$VERSION" != "$TAG_VERSION" ]; then
+              echo "⚠️ 警告: Tag版本($TAG_VERSION)与package.json版本($VERSION)不匹配"
+              echo "将使用package.json版本: $VERSION"
+            fi
+          else
+            # 分支推送触发
+            echo "🌿 Branch push, using package.json version: $VERSION"
+          fi
+          
+          # 创建一个临时标签用于 GoReleaser
+          TEMP_TAG="v${VERSION}"
+          
+          # 检查标签是否已存在
+          if git tag -l | grep -q "^$TEMP_TAG$"; then
+            echo "🗑️ 删除已存在的标签: $TEMP_TAG"
+            git tag -d "$TEMP_TAG"
+          fi
+          
+          # 在当前提交上创建新标签
+          echo "📌 在提交 $(git rev-parse HEAD) 上创建标签: $TEMP_TAG"
+          git tag "$TEMP_TAG" HEAD
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$TEMP_TAG" >> $GITHUB_OUTPUT
+          echo "is_tag_trigger=${{ startsWith(github.ref, 'refs/tags/') }}" >> $GITHUB_OUTPUT
+
+      - name: 🔍 验证Git状态
+        run: |
+          echo "Current ref: $GITHUB_REF"
+          echo "Event name: $GITHUB_EVENT_NAME"
+          echo "Version: ${{ steps.get_version.outputs.version }}"
+          echo "Tag name: ${{ steps.get_version.outputs.tag_name }}"
+          echo "Is tag trigger: ${{ steps.get_version.outputs.is_tag_trigger }}"
+          echo ""
+          echo "Available tags (latest 10):"
+          git tag -l --sort=-version:refname | head -10
+          echo ""
+          echo "Current commit tags:"
+          git tag --points-at HEAD
+          
+      - name: 🚀 运行 GoReleaser (正式发布)
+        if: steps.get_version.outputs.is_tag_trigger == 'true'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: 'latest'
+          args: release --clean --skip=validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🏗️ 运行 GoReleaser (开发构建)
+        if: steps.get_version.outputs.is_tag_trigger == 'false'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: 'latest'
+          args: release --clean --skip=validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

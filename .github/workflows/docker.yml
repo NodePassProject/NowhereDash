@@ -1,0 +1,130 @@
+name: Docker CI (release)
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+    branches: [ main ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    # 过滤掉 beta 标签，只处理正式版本
+    if: ${{ !contains(github.ref, 'beta') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          # 使用默认的buildx实例，避免平台检测问题
+          use: true
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔍 验证构建环境
+        run: |
+          echo "🏗️ Docker Buildx信息:"
+          docker buildx ls
+          echo ""
+          echo "🎯 支持的平台:"
+          docker buildx inspect --bootstrap | grep "Platforms:"
+          echo ""
+          echo "📋 当前构建配置:"
+          echo "  - 目标平台: linux/amd64, linux/arm64"
+          echo "  - 触发方式: ${{ github.ref }}"
+
+      - name: 📝 获取版本信息
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            # Tag触发，从tag获取版本
+            TAG_VERSION=${GITHUB_REF#refs/tags/v}
+            VERSION=$TAG_VERSION
+            IS_RELEASE=true
+            echo "🏷️ Tag触发，版本: $VERSION (正式发布)"
+          else
+            # 非tag触发，使用package.json版本
+            VERSION=$(node -p "require('./web/package.json').version")
+            IS_RELEASE=false
+            echo "📦 非tag触发，使用package.json版本: $VERSION (开发版本)"
+          fi
+          
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
+          echo "is_main=${{ github.ref == 'refs/heads/main' }}" >> $GITHUB_OUTPUT
+          echo "repo_name=$REPO_LC" >> $GITHUB_OUTPUT
+          echo "📦 最终版本: $VERSION, 是否发布: $IS_RELEASE"
+
+      - name: 📋 提取镜像元数据
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.get_version.outputs.repo_name }}
+          tags: |
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.get_version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.get_version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=NowhereDash
+            org.opencontainers.image.description=NowhereDash - 隧道管理面板
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+
+      - name: 🏗️ 构建和推送 Docker 镜像
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+            VERSION=${{ steps.get_version.outputs.version }}
+          # 明确指定支持的架构，避免unknown/unknown
+          platforms: linux/amd64,linux/arm64
+          # 启用构建缓存以提高速度
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # 确保只推送指定平台的镜像
+          provenance: false
+          sbom: false
+
+      - name: 🧹 清理构建缓存（避免unknown平台）
+        if: always()
+        run: |
+          echo "🧹 清理可能的无效构建缓存..."
+          docker buildx prune -f --filter until=1h
+          echo "✅ 缓存清理完成"
+
+      - name: 📢 输出版本信息
+        run: |
+          echo "🏷️ 版本: ${{ steps.get_version.outputs.version }}"
+          echo "🎯 触发方式: ${{ github.ref }}"
+          echo ""
+          echo "📦 生成的镜像标签:"
+          echo "${{ steps.meta.outputs.tags }}" | sed 's/^/  - /'
+          echo ""
+          echo "🏗️ 构建架构: linux/amd64, linux/arm64"
+          echo ""
+          echo "💡 标签说明:"
+          echo "  ✅ 正式发布版本"
+          echo "  📦 标签: latest + ${{ steps.get_version.outputs.version }}"
+          echo "  🚀 推荐使用: docker pull ghcr.io/${{ steps.get_version.outputs.repo_name }}:latest" 

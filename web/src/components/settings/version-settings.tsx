@@ -1,0 +1,641 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  Card,
+  CardBody,
+  Button,
+  Spinner,
+  Chip,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
+  Divider,
+  CardHeader,
+} from "@heroui/react";
+import { Icon } from "@iconify/react/dist/offline";
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { useTranslation } from "react-i18next";
+
+import { buildApiUrl } from "@/lib/utils";
+
+interface VersionInfo {
+  current: string;
+  goVersion: string;
+  os: string;
+  arch: string;
+  buildTime?: string;
+  restartPending?: boolean;
+  pendingVersion?: string;
+}
+
+interface GitHubRelease {
+  tag_name: string;
+  name: string;
+  body: string;
+  published_at: string;
+  html_url: string;
+  prerelease: boolean;
+  draft: boolean;
+}
+
+interface UpdateInfo {
+  current: VersionInfo;
+  stable?: GitHubRelease;
+  beta?: GitHubRelease;
+  hasStableUpdate: boolean;
+  hasBetaUpdate: boolean;
+}
+
+interface DeploymentInfo {
+  method: string;
+  canUpdate: boolean;
+  updateInfo: string;
+  manualUpdate: string;
+  hasDockerPerm: boolean;
+  environment: string;
+  details: string;
+  debugInfo: any;
+}
+
+interface DBInfo {
+  driver: string;
+  version: string;
+  database: string;
+  size: number;
+  sizeText: string;
+  host?: string;
+  walMode?: boolean;
+  tables: number;
+}
+
+export default function VersionSettings() {
+  const { t } = useTranslation("settings");
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [deploymentInfo, setDeploymentInfo] = useState<DeploymentInfo | null>(
+    null,
+  );
+  const [dbInfo, setDbInfo] = useState<DBInfo | null>(null);
+  const [dbLoading, setDbLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<GitHubRelease | null>(
+    null,
+  );
+
+  // 与 UpdateChip 同步的状态:二进制是否已替换待重启
+  const [restartPending, setRestartPending] = useState(false);
+  const [pendingVersion, setPendingVersion] = useState("");
+  const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const RESTART_COUNTDOWN_SECONDS = 15;
+
+  const { isOpen, onOpen, onClose } = useDisclosure();
+
+  // 获取当前版本和部署信息
+  const fetchVersionData = async () => {
+    try {
+      setLoading(true);
+      const [versionRes, deploymentRes] = await Promise.all([
+        fetch(buildApiUrl("/api/version/current")),
+        fetch(buildApiUrl("/api/version/deployment-info")),
+      ]);
+
+      if (versionRes.ok) {
+        const versionData = await versionRes.json();
+
+        setUpdateInfo({
+          current: versionData.data,
+          hasStableUpdate: false,
+          hasBetaUpdate: false,
+        });
+        // 同步 restart-pending(后端 /current 返回);页面刷新也能恢复"待重启"提示
+        if (versionData.data?.restartPending) {
+          setRestartPending(true);
+          setPendingVersion(versionData.data?.pendingVersion ?? "");
+        }
+      }
+
+      if (deploymentRes.ok) {
+        const deploymentData = await deploymentRes.json();
+
+        setDeploymentInfo(deploymentData.data);
+      }
+    } catch (error) {
+      console.error("获取版本信息失败:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 获取数据库信息
+  const fetchDBInfo = async () => {
+    try {
+      setDbLoading(true);
+      const res = await fetch(buildApiUrl("/api/version/db-info"));
+
+      if (res.ok) {
+        const json = await res.json();
+
+        if (json.success) setDbInfo(json.data);
+      }
+    } catch (error) {
+      console.error("获取数据库信息失败:", error);
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  // 检查更新
+  const checkUpdate = async () => {
+    try {
+      setChecking(true);
+      const response = await fetch(buildApiUrl("/api/version/check-update"));
+
+      if (response.ok) {
+        const data = await response.json();
+
+        setUpdateInfo(data.data);
+      }
+    } catch (error) {
+      console.error("检查更新失败:", error);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  // 执行自动更新:触发后端异步替换二进制,然后轮询 /current 等到 restartPending=true
+  const performAutoUpdate = async (type: "stable" | "beta") => {
+    try {
+      setUpdating(true);
+
+      const response = await fetch(buildApiUrl("/api/version/auto-update"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        alert(t("version.alert.updateFailed", { error: errorData.error || response.statusText }));
+        setUpdating(false);
+        return;
+      }
+
+      // 轮询等待替换完成(最多 5 分钟)
+      const deadline = Date.now() + 5 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const cur = await fetch(buildApiUrl("/api/version/current"));
+          if (cur.ok) {
+            const j = await cur.json();
+            if (j?.data?.restartPending) {
+              setRestartPending(true);
+              setPendingVersion(j.data.pendingVersion ?? "");
+              setUpdating(false);
+              return;
+            }
+          }
+        } catch {
+          /* 网络抖动,继续等 */
+        }
+      }
+      alert(t("update.timeout"));
+      setUpdating(false);
+    } catch (error) {
+      console.error("执行更新失败:", error);
+      alert(`更新失败: ${error}`);
+      setUpdating(false);
+    }
+  };
+
+  // 立即重启:启动 15s 倒计时,归零后调用 /restart 触发后端进程退出
+  const startRestartCountdown = () => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    setRestartCountdown(RESTART_COUNTDOWN_SECONDS);
+    countdownRef.current = setInterval(() => {
+      setRestartCountdown((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          void triggerRestart();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const triggerRestart = async () => {
+    try {
+      await fetch(buildApiUrl("/api/version/restart"), { method: "POST" });
+    } catch {
+      /* 连接被切断属正常,进程已退出 */
+    }
+    // 探测服务恢复后刷新页面
+    const probe = setInterval(async () => {
+      try {
+        const res = await fetch(buildApiUrl("/api/version/current"), { cache: "no-store" });
+        if (res.ok) {
+          clearInterval(probe);
+          window.location.reload();
+        }
+      } catch {
+        /* 仍在下线状态 */
+      }
+    }, 1500);
+    setTimeout(() => {
+      clearInterval(probe);
+      window.location.reload();
+    }, 60_000);
+  };
+
+  useEffect(() => {
+    fetchVersionData();
+    fetchDBInfo();
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-32">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Card className="mt-5 p-2">
+        <CardHeader className="flex gap-3">
+          <div className="flex flex-col flex-1">
+            <p className="text-lg font-semibold">{t("version.title")}</p>
+            <p className="text-sm text-default-500">{t("version.description")}</p>
+          </div>
+        </CardHeader>
+        <Divider />
+        <CardBody className="p-0">
+          <div className="divide-y divide-default-200">
+            {/* 当前版本行 */}
+            <div className="flex items-center justify-between px-4 py-3">
+              {/* 左侧：标题 + 版本标签 + 环境信息 */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-base font-medium whitespace-nowrap">
+                    {t("version.current.title")}
+                  </h3>
+                  <Chip color="primary" size="sm" variant="flat">
+                    {t("version.current.current")}: {updateInfo?.current.current || "unknown"}
+                  </Chip>
+                  {updateInfo?.hasStableUpdate && updateInfo.stable && (
+                    <Chip
+                      className="cursor-pointer hover:opacity-80"
+                      color="success"
+                      size="sm"
+                      variant="flat"
+                      onClick={() => {
+                        setSelectedVersion(updateInfo.stable!);
+                        onOpen();
+                      }}
+                    >
+                      {t("version.current.stable")}: {updateInfo.stable.tag_name}
+                    </Chip>
+                  )}
+                  {updateInfo?.hasBetaUpdate && updateInfo.beta && (
+                    <Chip
+                      className="cursor-pointer hover:opacity-80"
+                      color="warning"
+                      size="sm"
+                      variant="flat"
+                      onClick={() => {
+                        setSelectedVersion(updateInfo.beta!);
+                        onOpen();
+                      }}
+                    >
+                      {t("version.current.beta")}: {updateInfo.beta.tag_name}
+                    </Chip>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 text-sm text-default-500">
+                  <span>
+                    {t("version.current.system")}: {updateInfo?.current.os}/{updateInfo?.current.arch}
+                  </span>
+                </div>
+              </div>
+
+              {/* 右侧按钮 */}
+              <Button
+                isLoading={checking}
+                size="sm"
+                startContent={<Icon icon="solar:refresh-bold" width={18} />}
+                variant="bordered"
+                onPress={checkUpdate}
+              >
+                {t("version.current.checkUpdate")}
+              </Button>
+            </div>
+
+            {/* 部署环境行 */}
+            {deploymentInfo && (
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-medium whitespace-nowrap">
+                      {t("version.deployment.title")}
+                    </h3>
+                    <Chip
+                      color="default"
+                      size="sm"
+                      variant="flat"
+                      startContent={
+                        <Icon
+                          className="text-default-600"
+                          icon={
+                            deploymentInfo.method === "docker"
+                              ? "solar:server-path-bold"
+                              : "solar:monitor-bold"
+                          }
+                          width={14}
+                        />
+                      }
+                    >
+                      <span className="font-medium">
+                        {deploymentInfo.method === "docker"
+                          ? t("version.deployment.docker")
+                          : t("version.deployment.binary")}
+                      </span>
+                    </Chip>
+                  </div>
+                  <p className="text-sm text-default-500">
+                    {deploymentInfo.method === "docker"
+                      ? deploymentInfo.canUpdate
+                        ? t("version.deployment.dockerDetails")
+                        : t("version.deployment.dockerManualDetails")
+                      : deploymentInfo.method === "binary"
+                        ? t("version.deployment.binaryDetails")
+                        : t("version.deployment.unknownDetails")}
+                  </p>
+                  {deploymentInfo.canUpdate && (
+                    <p className="text-xs text-warning flex items-center gap-1">
+                      <Icon icon="solar:info-circle-bold" width={14} />
+                      {deploymentInfo.method === "docker"
+                        ? t("version.deployment.dockerRestartHint")
+                        : t("version.deployment.binaryRestartHint")}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  {/* 优先级最高:有待重启的更新 */}
+                  {restartPending ? (
+                    restartCountdown !== null ? (
+                      <Button
+                        color="success"
+                        isDisabled
+                        size="sm"
+                        startContent={<Spinner size="sm" color="default" />}
+                        className="text-white"
+                      >
+                        {t("update.popover.restarting", { seconds: restartCountdown })}
+                      </Button>
+                    ) : (
+                      <Button
+                        color="success"
+                        size="sm"
+                        startContent={<Icon icon="solar:refresh-bold" width={18} />}
+                        onPress={startRestartCountdown}
+                        className="text-white"
+                      >
+                        {pendingVersion
+                          ? `${t("update.popover.restartNow")} (${pendingVersion})`
+                          : t("update.popover.restartNow")}
+                      </Button>
+                    )
+                  ) : (
+                    <>
+                      {updateInfo?.hasStableUpdate &&
+                        updateInfo.stable &&
+                        deploymentInfo.canUpdate && (
+                          <Button
+                            color="primary"
+                            isLoading={updating}
+                            size="sm"
+                            startContent={
+                              <Icon icon="solar:rocket-bold" width={18} />
+                            }
+                            onPress={() => performAutoUpdate("stable")}
+                          >
+                            {t("version.deployment.autoUpdateStable")}
+                          </Button>
+                        )}
+                      {updateInfo?.hasBetaUpdate &&
+                        updateInfo.beta &&
+                        deploymentInfo.canUpdate && (
+                          <Button
+                            color="warning"
+                            isLoading={updating}
+                            size="sm"
+                            startContent={
+                              <Icon icon="solar:rocket-bold" width={18} />
+                            }
+                            onPress={() => performAutoUpdate("beta")}
+                          >
+                            {t("version.deployment.autoUpdateBeta")}
+                          </Button>
+                        )}
+                      {!deploymentInfo.canUpdate && (
+                        <Button
+                          isDisabled
+                          size="sm"
+                          startContent={
+                            <Icon icon="lucide:terminal" width={18} />
+                          }
+                          variant="flat"
+                        >
+                          {t("version.deployment.manualUpdate")}
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 手动更新说明，保持原有块级展示 */}
+          {deploymentInfo && !deploymentInfo.canUpdate && (
+            <div className="px-4 py-5 bg-default-100 rounded-b-lg">
+              <h4 className="text-sm font-medium mb-2">{t("version.updateInstructions.title")}</h4>
+              <div className="text-sm text-default-600 space-y-1">
+                {deploymentInfo.method === "docker" ? (
+                  <>
+                    <p>{t("version.updateInstructions.docker.desc")}</p>
+                    <div className="mt-2 p-2 bg-black text-green-400 rounded font-mono text-xs overflow-x-auto">
+                      <div>{t("version.updateInstructions.docker.pull")}</div>
+                      <div>
+                        docker pull ghcr.io/nodepassproject/nowheredash:latest
+                      </div>
+                      <div className="mt-1">{t("version.updateInstructions.docker.restart")}</div>
+                      <div>docker-compose down && docker-compose up -d</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p>{t("version.updateInstructions.binary.auto")}</p>
+                    <div className="mt-2 space-y-1 text-xs">
+                      <p>{t("version.updateInstructions.binary.autoDesc")}</p>
+                      <p className="mt-2 text-default-400">
+                        {t("version.updateInstructions.binary.manual")}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* 数据库信息卡片 */}
+      <Card className="mt-5 p-2">
+        <CardHeader className="flex gap-3">
+          <div className="flex flex-col flex-1">
+            <p className="text-lg font-semibold">{t("version.db.title")}</p>
+            <p className="text-sm text-default-500">{t("version.db.description")}</p>
+          </div>
+          <Button
+            isLoading={dbLoading}
+            size="sm"
+            startContent={<Icon icon="solar:refresh-bold" width={18} />}
+            variant="bordered"
+            onPress={fetchDBInfo}
+          >
+            {t("version.db.refresh")}
+          </Button>
+        </CardHeader>
+        <Divider />
+        <CardBody>
+          {dbInfo ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="flex items-center gap-3 p-4 bg-primary/10 rounded-lg">
+                <Icon className="text-primary text-xl" icon="solar:server-2-bold" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-default-600">{t("version.db.driver")}</p>
+                  <p className="text-base font-bold text-primary truncate">
+                    {dbInfo.driver === "sqlite"
+                      ? "SQLite"
+                      : dbInfo.driver === "postgres"
+                        ? "PostgreSQL"
+                        : dbInfo.driver || "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-success/10 rounded-lg">
+                <Icon className="text-success text-xl" icon="solar:database-bold" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-default-600">{t("version.db.size")}</p>
+                  <p className="text-base font-bold text-success">
+                    {dbInfo.sizeText || "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-secondary/10 rounded-lg md:col-span-2 lg:col-span-1">
+                <Icon className="text-secondary text-xl" icon="solar:server-path-bold" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-default-600">
+                    {dbInfo.driver === "postgres"
+                      ? t("version.db.host")
+                      : t("version.db.location")}
+                  </p>
+                  <p
+                    className="text-sm font-semibold text-secondary truncate"
+                    title={dbInfo.driver === "postgres" ? dbInfo.host : dbInfo.database}
+                  >
+                    {dbInfo.driver === "postgres"
+                      ? dbInfo.host || "-"
+                      : dbInfo.database || "-"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : dbLoading ? (
+            <div className="flex justify-center items-center h-24">
+              <Spinner size="sm" />
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-default-500">{t("version.db.noData")}</p>
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* 更新详情模态框 */}
+      <Modal isOpen={isOpen} size="2xl" onClose={onClose}>
+        <ModalContent>
+          <ModalHeader>
+            <h3>{t("version.modal.title")}</h3>
+          </ModalHeader>
+          <ModalBody>
+            {selectedVersion && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Chip
+                    color={selectedVersion.prerelease ? "warning" : "success"}
+                    variant="flat"
+                  >
+                    {selectedVersion.tag_name}
+                    {selectedVersion.prerelease && " " + t("version.modal.prerelease")}
+                  </Chip>
+                  <span className="text-sm text-default-500">
+                    {t("version.modal.publishedAt")}{" "}
+                    {format(
+                      new Date(selectedVersion.published_at),
+                      "yyyy年MM月dd日",
+                      { locale: zhCN },
+                    )}
+                  </span>
+                </div>
+
+                <div className="prose prose-sm max-w-none">
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: selectedVersion.body.replace(/\n/g, "<br/>"),
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={onClose}>
+              {t("version.modal.close")}
+            </Button>
+            <Button
+              color="primary"
+              endContent={<Icon icon="lucide:external-link" width={18} />}
+              onPress={() => {
+                if (selectedVersion?.html_url) {
+                  window.open(selectedVersion.html_url, "_blank");
+                }
+              }}
+            >
+              {t("version.modal.viewDetails")}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </>
+  );
+}

@@ -1,0 +1,53 @@
+package auth
+
+import "time"
+
+// LoginRequest 登录请求结构
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// LoginResponse 登录响应结构
+type LoginResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
+}
+
+// Session 用户会话结构
+type Session struct {
+	SessionID string    `json:"sessionId"`
+	Username  string    `json:"username"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	IsActive  bool      `json:"isActive"`
+}
+
+// SystemConfig 系统配置结构
+type SystemConfig struct {
+	Key         string `json:"key"`
+	Value       string `json:"value"`
+	Description string `json:"description,omitempty"`
+}
+
+// SystemConfigKeys 系统配置键名常量
+const (
+	ConfigKeyIsInitialized   = "system_initialized"
+	ConfigKeyAdminUsername   = "admin_username"
+	ConfigKeyAdminPassword   = "admin_password_hash"
+	ConfigKeyCurrentTokenJTI = "current_token_jti" // 当前有效的 JWT ID，用于实现 token 互踢
+
+	// Compliance acknowledgment keys — 由 setup 向导 Step 2 与运行时
+	// 复确认 gate 共用。Version 变化时需要重新确认。
+	ConfigKeyComplianceVersion = "compliance_accepted_version"
+	ConfigKeyComplianceAt      = "compliance_accepted_at"
+	ConfigKeyComplianceIP      = "compliance_accepted_ip"
+	ConfigKeyComplianceUA      = "compliance_accepted_ua"
+)
+
+// 默认账号密码常量
+const (
+	DefaultAdminUsername  = "nowhere"
+	DefaultAdminPassword  = "Np123456"
+	DemoModeAdminPassword = "Np123456." // Demo 模式专用密码
+)

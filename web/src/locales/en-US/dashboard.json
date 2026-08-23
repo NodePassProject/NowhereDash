@@ -1,0 +1,101 @@
+{
+  "title": "👋 Overview",
+  "currentTime": "Current Time",
+  "stats": {
+    "instances": "Tunnels",
+    "endpoints": "Nodes",
+    "subscriptions": "Subscriptions",
+    "running": "Running",
+    "stopped": "Stopped",
+    "error": "Error",
+    "offline": "Offline"
+  },
+  "traffic": {
+    "overview": "Traffic Overview",
+    "weeklyStats": "Weekly Statistics",
+    "todayTraffic": "Today's Traffic",
+    "totalConsumption": "Total Traffic Consumption",
+    "loading": "Loading traffic data...",
+    "noData": "No traffic data",
+    "noDataDescription": "Traffic trend data will be displayed here when tunnels are running",
+    "tcpIn": "TCP In",
+    "tcpOut": "TCP Out",
+    "udpIn": "UDP In",
+    "udpOut": "UDP Out"
+  },
+  "subscriptions": {
+    "title": "Subscription Status",
+    "activeSummary": "Active",
+    "attentionSummary": "Attention",
+    "portalSummary": "Tunnels",
+    "neverExpires": "Never expires",
+    "expiresOn": "Expires {{date}}",
+    "trafficUsage": "Traffic usage for {{name}}",
+    "unlimited": "Unlimited",
+    "portalCount": "{{count}} Tunnels",
+    "loadFailed": "Failed to load subscription status",
+    "retry": "Retry",
+    "emptyTitle": "No subscriptions yet",
+    "emptyHint": "Create one to track expiry and traffic from the dashboard.",
+    "create": "Create subscription",
+    "status": {
+      "active": "Active",
+      "expired": "Expired",
+      "overLimit": "Over limit"
+    }
+  },
+  "activity": {
+    "title": "Recent Activity",
+    "loading": "Loading...",
+    "filter": "Showing last 100 records",
+    "noRecords": "No operation records",
+    "clearTitle": "Clear Recent Activity",
+    "confirmClear": "Confirm Clear",
+    "confirmMessage": "This operation will delete all recent activity records and cannot be undone. Are you sure you want to continue?",
+    "clearing": "Clearing..."
+  },
+  "table": {
+    "time": "Time",
+    "action": "Action",
+    "instance": "Tunnel",
+    "status": "Status"
+  },
+  "actions": {
+    "start": "Start",
+    "stop": "Stop",
+    "create": "Create",
+    "delete": "Delete",
+    "restart": "Restart"
+  },
+  "errors": {
+    "fetchStatsError": "Failed to fetch tunnel statistics",
+    "fetchLogsError": "Failed to fetch operation logs",
+    "fetchTrafficError": "Failed to fetch traffic trend data",
+    "fetchWeeklyStatsError": "Failed to fetch weekly statistics",
+    "clearLogsError": "Unable to clear logs"
+  },
+  "quickActions": {
+    "title": "Quick Actions",
+    "addEndpoint": "Add Node",
+    "addEndpointDesc": "Onboard a new Nowhere node",
+    "createTunnel": "Create Tunnel",
+    "createTunnelDesc": "Create a new Nowhere tunnel",
+    "addSubscription": "Add Subscription",
+    "addSubscriptionDesc": "Publish existing Tunnels",
+    "debugTools": "Debug Tools",
+    "docs": "Documentation",
+    "settings": "Settings",
+    "settingsDesc": "Account, security & appearance",
+    "addEndpointSuccess": "Added Successfully",
+    "addEndpointSuccessDesc": "Node added successfully",
+    "addEndpointFailed": "Add Failed",
+    "addEndpointError": "Failed to add node",
+    "addEndpointErrorDesc": "Error occurred while adding node"
+  },
+  "update": {
+    "newVersionAvailable": "New Version Available",
+    "defaultMessage": "Click to view update details and download",
+    "viewRelease": "View"
+  },
+  "loading": "Loading..."
+}

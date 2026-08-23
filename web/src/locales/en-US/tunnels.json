@@ -1,0 +1,147 @@
+{
+  "toast": {
+    "unknownError": "Unknown error",
+    "instanceActions": {
+      "starting": "Starting tunnel...",
+      "stopping": "Stopping tunnel...",
+      "restarting": "Restarting tunnel...",
+      "deleting": "Deleting tunnel...",
+      "pleaseWait": "Please wait",
+      "startInstance": "Starting {{name}}",
+      "stopInstance": "Stopping {{name}}",
+      "restartInstance": "Restarting {{name}}",
+      "deleteInstance": "Deleting {{name}}",
+      "instanceStarted": "Tunnel started",
+      "instanceStopped": "Tunnel stopped",
+      "instanceRestarted": "Tunnel restarted",
+      "instanceDeleted": "Tunnel deleted",
+      "startedSuccessfully": "{{name}} has been started successfully",
+      "stoppedSuccessfully": "{{name}} has been stopped successfully",
+      "restartedSuccessfully": "{{name}} has been restarted and is running",
+      "deletedSuccessfully": "{{name}} has been deleted successfully",
+      "instanceStartedSuccessfully": "Tunnel has been started successfully",
+      "instanceStoppedSuccessfully": "Tunnel has been stopped successfully",
+      "instanceRestartedSuccessfully": "Tunnel has been restarted and is running",
+      "instanceDeletedSuccessfully": "Tunnel has been deleted successfully",
+      "failedToStart": "Failed to start",
+      "failedToStop": "Failed to stop",
+      "restartFailed": "Restart failed",
+      "deleteFailed": "Delete failed",
+      "failedToStartInstance": "Failed to start {{name}}",
+      "failedToStopInstance": "Failed to stop {{name}}",
+      "failedToRestartInstance": "Failed to restart {{name}}",
+      "failedToDeleteInstance": "Failed to delete {{name}}"
+    }
+  },
+  "details": {
+    "chartStates": {
+      "loading": "Loading...",
+      "loadFailed": "Load failed",
+      "noData": "No data"
+    },
+    "chartTooltips": {
+      "tcpInbound": "TCP Inbound",
+      "tcpOutbound": "TCP Outbound",
+      "udpInbound": "UDP Inbound",
+      "udpOutbound": "UDP Outbound",
+      "upload": "Upload",
+      "download": "Download",
+      "pool": "Pool",
+      "latency": "Latency",
+      "tcp": "TCP",
+      "udp": "UDP",
+      "traffic": "Traffic Usage"
+    },
+    "logs": {
+      "title": "Tunnel Logs",
+      "logTitle": "Logs",
+      "realtime": "Realtime Logs",
+      "realtimeShort": "Realtime",
+      "realtimeOutput": "Realtime Output",
+      "selectDate": "Select Date",
+      "export": "Export Logs",
+      "exportFile": "Export Log File",
+      "clear": "Clear",
+      "cleared": "File logs cleared",
+      "timeError": "Time parsing error",
+      "refresh": "Refresh",
+      "scrollToBottom": "Scroll to Bottom",
+      "confirmClear": "Confirm Clear Logs",
+      "clearRealtimeWarning": "This will clear the current realtime output.",
+      "clearFileWarning": "This will clear the displayed content and all saved log files, and cannot be undone.",
+      "confirmClearButton": "Confirm Clear",
+      "cancel": "Cancel",
+      "loading": "Loading file logs...",
+      "waitingForLogs": "Waiting for log push...",
+      "noLogs": "No log records",
+      "fetchFailed": "Failed to fetch logs",
+      "clearSuccess": "Clear successful",
+      "clearSuccessDesc": "Logs cleared",
+      "clearFailed": "Clear failed",
+      "clearFailedDesc": "Failed to clear logs"
+    },
+    "timeRange": {
+      "1h": "1 Hour",
+      "6h": "6 Hours",
+      "12h": "12 Hours",
+      "24h": "24 Hours"
+    },
+    "wsMonitor": {
+      "connected": "Tunnel monitoring WebSocket connected",
+      "connectedDesc": "Started receiving real-time tunnel performance data",
+      "tcpTraffic": "TCP Traffic",
+      "udpTraffic": "UDP Traffic",
+      "send": "Send",
+      "receive": "Receive",
+      "latency": "Latency",
+      "pool": "Pool",
+      "connections": "Connections",
+      "tcp": "TCP",
+      "udp": "UDP"
+    }
+  },
+  "instanceTagModal": {
+    "title": "Set Tags",
+    "tabs": {
+      "json": "JSON Editor",
+      "template": "Template Editor",
+      "ariaLabel": "Edit Mode"
+    },
+    "fields": {
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "unlimited": "Unlimited",
+      "amount": "Amount",
+      "amountPlaceholder": "Enter amount",
+      "bandwidth": "Bandwidth",
+      "bandwidthPlaceholder": "Enter bandwidth value",
+      "traffic": "Traffic",
+      "trafficPlaceholder": "Enter traffic value",
+      "networkRoute": "Network Route",
+      "networkRoutePlaceholder": "e.g., 4837, 9929, Unicom, etc.",
+      "extra": "Extra Info",
+      "extraPlaceholder": "Separate multiple items with commas"
+    },
+    "amountType": {
+      "none": "No Format",
+      "prefix": "Prefix",
+      "suffix": "Suffix",
+      "free": "Free"
+    },
+    "ariaLabels": {
+      "currencySymbol": "Currency Symbol",
+      "currencyCode": "Currency Code"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "toast": {
+      "saveFailed": "Save Failed",
+      "saveFailedMessage": "Failed to save tags",
+      "saveSuccess": "Save Successful",
+      "saveSuccessDesc": "Tunnel tags have been updated",
+      "unknownError": "Unknown error"
+    }
+  }
+}

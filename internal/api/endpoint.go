@@ -1,0 +1,1590 @@
+package api
+
+import (
+	"NowhereDash/internal/db"
+	"NowhereDash/internal/endpoint"
+	log "NowhereDash/internal/log"
+	"NowhereDash/internal/models"
+	"NowhereDash/internal/nowhere"
+	"NowhereDash/internal/sse"
+	"NowhereDash/internal/subscription"
+	"crypto/tls"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"html"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+// EndpointHandler 端点相关的处理器
+type EndpointHandler struct {
+	endpointService *endpoint.Service
+	sseManager      *sse.Manager
+}
+
+var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+
+func processAnsiColors(input string) string {
+	return html.EscapeString(ansiEscapePattern.ReplaceAllString(input, ""))
+}
+
+// NewEndpointHandler 创建端点处理器实例
+func NewEndpointHandler(endpointService *endpoint.Service, mgr *sse.Manager) *EndpointHandler {
+	return &EndpointHandler{
+		endpointService: endpointService,
+		sseManager:      mgr,
+	}
+}
+
+// SetupEndpointRoutes 设置端点相关路由
+func SetupEndpointRoutes(rg *gin.RouterGroup, endpointService *endpoint.Service, sseManager *sse.Manager) {
+	// 创建EndpointHandler实例
+	endpointHandler := NewEndpointHandler(endpointService, sseManager)
+
+	// 端点相关路由
+	rg.GET("/endpoints", endpointHandler.HandleGetEndpoints)
+	rg.POST("/endpoints", endpointHandler.HandleCreateEndpoint)
+	rg.PUT("/endpoints/:id", endpointHandler.HandleUpdateEndpoint)
+	rg.DELETE("/endpoints/:id", endpointHandler.HandleDeleteEndpoint)
+	rg.PATCH("/endpoints/:id", endpointHandler.HandlePatchEndpoint)
+	rg.PATCH("/endpoints", endpointHandler.HandlePatchEndpoint)
+	rg.POST("/endpoints/:id/reset-key", endpointHandler.HandleResetApiKey)
+	rg.GET("/endpoints/simple", endpointHandler.HandleGetSimpleEndpoints)
+	rg.POST("/endpoints/test", endpointHandler.HandleTestEndpoint)
+	rg.GET("/endpoints/status", endpointHandler.HandleEndpointStatus)
+	rg.GET("/endpoints/:id/detail", endpointHandler.HandleGetEndpointDetail)
+	rg.GET("/endpoints/:id/info", endpointHandler.HandleGetEndpointInfo)
+	rg.GET("/endpoints/:id/file-logs", endpointHandler.HandleEndpointFileLogs)
+	rg.DELETE("/endpoints/:id/file-logs/clear", endpointHandler.HandleClearEndpointFileLogs)
+	rg.GET("/endpoints/:id/file-logs/dates", endpointHandler.HandleGetAvailableLogDates)
+	rg.GET("/endpoints/:id/stats", endpointHandler.HandleEndpointStats)
+	rg.POST("/endpoints/:id/tcping", endpointHandler.HandleTCPing)
+	rg.POST("/endpoints/:id/network-debug", endpointHandler.HandleNetworkDebug)
+	rg.POST("/endpoints/:id/test-connection", endpointHandler.HandleTestConnection)
+}
+
+// HandleGetEndpoints 获取端点列表
+func (h *EndpointHandler) HandleGetEndpoints(c *gin.Context) {
+	endpoints, err := h.endpointService.GetEndpoints()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Failed to retrieve endpoint list: " + err.Error(),
+		})
+		return
+	}
+
+	if endpoints == nil {
+		endpoints = []endpoint.EndpointWithStats{}
+	}
+	c.JSON(http.StatusOK, endpoints)
+}
+
+// HandleCreateEndpoint 创建新端点
+func (h *EndpointHandler) HandleCreateEndpoint(c *gin.Context) {
+	var req endpoint.CreateEndpointRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid request data",
+		})
+		return
+	}
+
+	// 对请求数据进行清理和trim处理
+	req.Name = strings.TrimSpace(req.Name)
+	req.URL = strings.TrimSpace(req.URL)
+	req.APIPath = strings.TrimSpace(req.APIPath)
+	req.APIKey = strings.TrimSpace(req.APIKey)
+	req.Hostname = strings.TrimSpace(req.Hostname)
+	if req.APIPath == "" {
+		req.APIPath = "/api/v2"
+	}
+
+	// 验证请求数据
+	if req.Name == "" || req.URL == "" || req.APIPath == "" || req.APIKey == "" {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Missing required fields",
+		})
+		return
+	}
+
+	newEndpoint, err := h.endpointService.CreateEndpoint(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	// 创建成功后，异步启动 SSE 监听
+	if h.sseManager != nil && newEndpoint != nil {
+		go func(ep *endpoint.Endpoint) {
+			log.Infof("[Master-%v] 创建成功，准备启动 SSE 监听", ep.ID)
+			if err := h.sseManager.ConnectEndpoint(ep.ID, ep.URL, ep.APIPath, ep.APIKey); err != nil {
+				log.Errorf("[Master-%v] 启动 SSE 监听失败: %v", ep.ID, err)
+			}
+		}(newEndpoint)
+	}
+
+	c.JSON(http.StatusOK, endpoint.EndpointResponse{
+		Success:  true,
+		Message:  "Endpoint created successfully",
+		Endpoint: newEndpoint,
+	})
+}
+
+// HandleUpdateEndpoint 更新端点信息 (PUT /api/endpoints/{id})
+func (h *EndpointHandler) HandleUpdateEndpoint(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid endpoint ID",
+		})
+		return
+	}
+
+	var body struct {
+		Name    string `json:"name"`
+		URL     string `json:"url"`
+		APIPath string `json:"apiPath"`
+		APIKey  string `json:"apiKey"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid request data",
+		})
+		return
+	}
+
+	// 对请求数据进行清理和trim处理
+	body.Name = strings.TrimSpace(body.Name)
+	body.URL = strings.TrimSpace(body.URL)
+	body.APIPath = strings.TrimSpace(body.APIPath)
+	body.APIKey = strings.TrimSpace(body.APIKey)
+
+	req := endpoint.UpdateEndpointRequest{
+		ID:      id,
+		Action:  "update",
+		Name:    body.Name,
+		URL:     body.URL,
+		APIPath: body.APIPath,
+		APIKey:  body.APIKey,
+	}
+
+	updatedEndpoint, err := h.endpointService.UpdateEndpoint(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+	if h.sseManager != nil {
+		_ = h.sseManager.ConnectEndpoint(updatedEndpoint.ID, updatedEndpoint.URL, updatedEndpoint.APIPath, updatedEndpoint.APIKey)
+	}
+
+	c.JSON(http.StatusOK, endpoint.EndpointResponse{
+		Success:  true,
+		Message:  "Endpoint updated successfully",
+		Endpoint: updatedEndpoint,
+	})
+}
+
+// HandleDeleteEndpoint 删除端点 (DELETE /api/endpoints/{id})
+func (h *EndpointHandler) HandleDeleteEndpoint(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid endpoint ID",
+		})
+		return
+	}
+
+	// 先获取端点下所有实例ID用于清理文件日志
+	var instanceIDs []string
+	db := h.endpointService.DB()
+
+	// 从Tunnel表获取实例ID
+	var tunnels []models.Tunnel
+	if err := db.Select("DISTINCT instance_id").Where("endpoint_id = ? AND instance_id IS NOT NULL AND instance_id != ''", id).Find(&tunnels).Error; err == nil {
+		for _, tunnel := range tunnels {
+			if tunnel.InstanceID != nil && *tunnel.InstanceID != "" {
+				instanceIDs = append(instanceIDs, *tunnel.InstanceID)
+			}
+		}
+	}
+
+	// 1. 如果存在 SSE 监听，先断开
+	if h.sseManager != nil {
+		log.Infof("[Master-%v] 删除端点前，先断开 SSE 监听", id)
+		h.sseManager.DisconnectEndpoint(id)
+		log.Infof("[Master-%v] 已断开 SSE 监听", id)
+	}
+
+	// 2. 从数据库删除
+	log.Infof("[Master-%v] 开始删除端点数据", id)
+	if err := h.endpointService.DeleteEndpoint(id); err != nil {
+		log.Errorf("[Master-%v] 删除端点失败: %v", id, err)
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	// 清理所有相关的文件日志
+	if h.sseManager != nil && h.sseManager.GetFileLogger() != nil {
+		for _, instanceID := range instanceIDs {
+			if err := h.sseManager.GetFileLogger().ClearLogs(id, instanceID); err != nil {
+				log.Warnf("[API] 端点删除-清理文件日志失败: endpointID=%d, instanceID=%s, err=%v", id, instanceID, err)
+			} else {
+				log.Infof("[API] 端点删除-已清理文件日志: endpointID=%d, instanceID=%s", id, instanceID)
+			}
+		}
+	}
+
+	log.Infof("[Master-%v] 端点及其隧道已删除", id)
+
+	c.JSON(http.StatusOK, endpoint.EndpointResponse{
+		Success: true,
+		Message: "Endpoint deleted successfully",
+	})
+}
+
+// HandlePatchEndpoint PATCH /api/endpoints/{id}
+func (h *EndpointHandler) HandlePatchEndpoint(c *gin.Context) {
+	idStr := c.Param("id")
+
+	// 先解析 body，可能包含 id
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid request data",
+		})
+		return
+	}
+
+	var id int64
+	if idStr != "" {
+		parsed, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+				Success: false,
+				Error:   "Invalid endpoint ID",
+			})
+			return
+		}
+		id = parsed
+	} else {
+		// 从 body 提取 id 字段（JSON 编码后数字为 float64）
+		if idVal, ok := body["id"].(float64); ok {
+			id = int64(idVal)
+		} else {
+			c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+				Success: false,
+				Error:   "Missing endpoint ID",
+			})
+			return
+		}
+	}
+
+	action, _ := body["action"].(string)
+	switch action {
+	case "rename":
+		name, _ := body["name"].(string)
+		name = strings.TrimSpace(name) // 清理和trim处理
+		req := endpoint.UpdateEndpointRequest{
+			ID:     id,
+			Action: "rename",
+			Name:   name,
+		}
+		if _, err := h.endpointService.UpdateEndpoint(req); err != nil {
+			c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, endpoint.EndpointResponse{
+			Success: true,
+			Message: "Endpoint name updated",
+			Endpoint: map[string]interface{}{
+				"id":   id,
+				"name": name,
+			},
+		})
+	case "reconnect":
+		if h.sseManager != nil {
+			ep, err := h.endpointService.GetEndpointByID(id)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{Success: false, Error: "Failed to get endpoint information: " + err.Error()})
+				return
+			}
+
+			// 先测试端点连接
+			if err := h.testEndpointConnection(ep.URL, ep.APIPath, ep.APIKey, 5000); err != nil {
+				log.Warnf("[Master-%v] 端点连接测试失败: %v", id, err)
+				c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{Success: false, Error: "Master is offline or cannot connect: " + err.Error()})
+				return
+			}
+
+			go func(eid int64) {
+				log.Infof("[Master-%v] 手动重连端点，启动 SSE", eid)
+				if err := h.sseManager.ConnectEndpoint(eid, ep.URL, ep.APIPath, ep.APIKey); err != nil {
+					log.Errorf("[Master-%v] 手动重连端点失败: %v", eid, err)
+				}
+			}(id)
+		}
+		c.JSON(http.StatusOK, endpoint.EndpointResponse{Success: true, Message: "Endpoint reconnected"})
+	case "disconnect":
+		if h.sseManager != nil {
+			go func(eid int64) {
+				log.Infof("[Master-%v] 手动断开端点 SSE", eid)
+				h.sseManager.DisconnectEndpoint(eid)
+
+				// 更新端点状态为 OFFLINE
+				// if err := h.endpointService.UpdateEndpointStatus(eid, endpoint.StatusOffline); err != nil {
+				// 	log.Errorf("[Master-%v] 更新端点状态为 OFFLINE 失败: %v", eid, err)
+				// } else {
+				// 	log.Infof("[Master-%v] 端点状态已更新为 OFFLINE", eid)
+				// }
+			}(id)
+		}
+		c.JSON(http.StatusOK, endpoint.EndpointResponse{Success: true, Message: "Endpoint disconnected"})
+	case "refresTunnel":
+		if err := h.refreshTunnels(id); err != nil {
+			c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, endpoint.EndpointResponse{Success: true, Message: "Instances synchronized"})
+	case "updateConfig":
+		// 修改配置：直接更新配置和缓存，SSE会自动使用新的缓存配置
+		var req endpoint.UpdateEndpointRequest
+		req.ID = id
+		req.Action = "updateConfig"
+
+		// 从body中获取参数
+		if name, ok := body["name"].(string); ok {
+			req.Name = strings.TrimSpace(name)
+		}
+		if url, ok := body["url"].(string); ok {
+			req.URL = strings.TrimSpace(url)
+			// 从完整URL中分离baseURL和apiPath
+			if parsedURL := h.parseFullURL(req.URL); parsedURL != nil {
+				req.URL = parsedURL.BaseURL
+				req.APIPath = parsedURL.APIPath
+			}
+		}
+		if apiKey, ok := body["apiKey"].(string); ok {
+			req.APIKey = strings.TrimSpace(apiKey)
+		}
+		if hostname, ok := body["hostname"].(string); ok {
+			req.Hostname = strings.TrimSpace(hostname)
+		}
+
+		// 更新数据库配置（UpdateEndpoint内部会自动更新缓存）
+		updatedEndpoint, err := h.endpointService.UpdateEndpoint(req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{Success: false, Error: err.Error()})
+			return
+		}
+		if h.sseManager != nil {
+			_ = h.sseManager.ConnectEndpoint(updatedEndpoint.ID, updatedEndpoint.URL, updatedEndpoint.APIPath, updatedEndpoint.APIKey)
+		}
+
+		log.Infof("[Master-%v] 配置更新成功，缓存已更新: URL=%s, APIPath=%s", id, updatedEndpoint.URL, updatedEndpoint.APIPath)
+		c.JSON(http.StatusOK, endpoint.EndpointResponse{Success: true, Message: "Configuration updated successfully"})
+	default:
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{Success: false, Error: "Unsupported operation type"})
+	}
+}
+
+// HandleGetSimpleEndpoints GET /api/endpoints/simple
+func (h *EndpointHandler) HandleGetSimpleEndpoints(c *gin.Context) {
+	excludeFailed := c.Query("excludeFailed") == "true"
+	endpoints, err := h.endpointService.GetSimpleEndpoints(excludeFailed)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{Success: false, Error: err.Error()})
+		return
+	}
+
+	if endpoints == nil {
+		endpoints = []endpoint.SimpleEndpoint{}
+	}
+	c.JSON(http.StatusOK, endpoints)
+}
+
+// TestConnectionRequest 测试端点连接请求
+type TestConnectionRequest struct {
+	URL     string `json:"url"`
+	APIPath string `json:"apiPath"`
+	APIKey  string `json:"apiKey"`
+	Timeout int    `json:"timeout"`
+}
+
+// HandleTestEndpoint POST /api/endpoints/test
+func (h *EndpointHandler) HandleTestEndpoint(c *gin.Context) {
+	var req TestConnectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Invalid request body"})
+		return
+	}
+
+	// 对请求数据进行清理和trim处理
+	req.URL = strings.TrimSpace(req.URL)
+	req.APIPath = strings.TrimSpace(req.APIPath)
+	req.APIKey = strings.TrimSpace(req.APIKey)
+	if req.APIPath == "" {
+		req.APIPath = "/api/v2"
+	}
+
+	if req.Timeout <= 0 {
+		req.Timeout = 10000
+	}
+
+	testURL := req.URL + req.APIPath + "/events"
+
+	client := &http.Client{
+		Timeout: time.Duration(req.Timeout) * time.Millisecond,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	httpReq, err := http.NewRequest("GET", testURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
+	httpReq.Header.Set("X-API-Key", req.APIKey)
+	httpReq.Header.Set("Cache-Control", "no-cache")
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		c.JSON(http.StatusOK, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		c.JSON(http.StatusOK, map[string]interface{}{"success": false, "error": "HTTP error", "status": resp.StatusCode, "details": string(bodyBytes)})
+		return
+	}
+
+	c.JSON(http.StatusOK, map[string]interface{}{"success": true, "message": "Endpoint connection test passed", "status": resp.StatusCode})
+}
+
+// HandleEndpointStatus GET /api/endpoints/status (SSE)
+func (h *EndpointHandler) HandleEndpointStatus(c *gin.Context) {
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
+	send := func() {
+		endpoints, err := h.endpointService.GetEndpoints()
+		if err != nil {
+			return
+		}
+		data, _ := json.Marshal(endpoints)
+		fmt.Fprintf(c.Writer, "data: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	send()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	notify := c.Request.Context().Done()
+	for {
+		select {
+		case <-notify:
+			return
+		case <-ticker.C:
+			send()
+		}
+	}
+}
+
+// HandleEndpointLogs 根据 endpointId 查询最近 limit 条日志(从文件读取)
+func (h *EndpointHandler) HandleEndpointLogs(c *gin.Context) {
+	// Method validation removed - handled by Gin router
+
+	idStr := c.Param("id")
+	if idStr == "" {
+		// Status handled by c.JSON
+		c.JSON(http.StatusOK, map[string]interface{}{"error": "Missing endpoint ID"})
+		return
+	}
+
+	endpointID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		// Status handled by c.JSON
+		c.JSON(http.StatusOK, map[string]interface{}{"error": "Invalid endpoint ID"})
+		return
+	}
+
+	// 解析 limit 参数，默认 1000
+	limit := 1000
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+
+	// 解析 instanceId 参数
+	instanceID := c.Query("instanceId")
+	if instanceID == "" {
+		// Status handled by c.JSON
+		c.JSON(http.StatusOK, map[string]interface{}{"error": "Missing instance ID"})
+		return
+	}
+
+	// 解析 days 参数，默认查询最近3天
+	days := 3
+	if d := c.Query("days"); d != "" {
+		if v, err := strconv.Atoi(d); err == nil && v > 0 && v <= 30 {
+			days = v
+		}
+	}
+
+	// TODO: 这里需要获取文件日志管理器的引用
+	// 暂时返回模拟数据，实际实现需要从SSE服务获取fileLogger
+	logs := []map[string]interface{}{
+		{
+			"id":        1,
+			"message":   fmt.Sprintf("Sample file logs for endpoint %d instance %s", endpointID, instanceID),
+			"isHtml":    true,
+			"traffic":   map[string]int64{"tcpRx": 0, "tcpTx": 0, "udpRx": 0, "udpTx": 0},
+			"timestamp": time.Now(),
+		},
+	}
+
+	// 返回数据，兼容旧前端结构
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"logs":        logs,
+		"success":     true,
+		"storageMode": "file", // 标识为文件存储模式
+		"info":        fmt.Sprintf("从文件读取端点%d最近%d天的日志，限制%d条", endpointID, days, limit),
+	})
+}
+
+// HandleSearchEndpointLogs GET /api/endpoints/{id}/logs/search
+// 支持查询条件: level, instanceId, start, end, page, size
+// DEPRECATED: EndpointSSE 模型已移除 Logs 字段
+func (h *EndpointHandler) HandleSearchEndpointLogs(c *gin.Context) {
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"error": "This feature is deprecated, EndpointSSE model no longer supports Logs field",
+	})
+}
+
+// HandleRecycleList 获取指定端点回收站隧道 (GET /api/endpoints/{id}/recycle)
+// DEPRECATED: TunnelRecycle 模型已移除
+func (h *EndpointHandler) HandleRecycleList(c *gin.Context) {
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"error": "This feature is deprecated, TunnelRecycle model has been removed",
+	})
+}
+
+// HandleRecycleCount 获取回收站数量 (GET /api/endpoints/{id}/recycle/count)
+// DEPRECATED: TunnelRecycle 模型已移除
+func (h *EndpointHandler) HandleRecycleCount(c *gin.Context) {
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"error": "This feature is deprecated, TunnelRecycle model has been removed",
+	})
+}
+
+// HandleRecycleDelete 删除回收站记录并清空相关 SSE (DELETE /api/endpoints/{endpointId}/recycle/{recycleId})
+// DEPRECATED: TunnelRecycle 模型已移除
+func (h *EndpointHandler) HandleRecycleDelete(c *gin.Context) {
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"error": "This feature is deprecated, TunnelRecycle model has been removed",
+	})
+}
+
+// HandleRecycleListAll 获取全部端点的回收站隧道 (GET /api/recycle)
+// DEPRECATED: TunnelRecycle 模型已移除
+func (h *EndpointHandler) HandleRecycleListAll(c *gin.Context) {
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"error": "This feature is deprecated, TunnelRecycle model has been removed",
+	})
+}
+
+// HandleRecycleClearAll 清空全部回收站记录 (DELETE /api/recycle)
+// DEPRECATED: TunnelRecycle 模型已移除
+func (h *EndpointHandler) HandleRecycleClearAll(c *gin.Context) {
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"error": "This feature is deprecated, TunnelRecycle model has been removed",
+	})
+}
+
+// buildTunnelFromInstance 从实例数据构建隧道模型，类似 sse/service.go 的 buildTunnel
+func buildTunnelFromInstance(endpointID int64, inst nowhere.InstanceResult) *models.Tunnel {
+	// OpenCtrl's config URL contains the complete runtime defaults.
+	tunnel := nowhere.ParseInstanceTunnel(inst)
+	// 补充从EndpointSSE获取的信息
+	tunnel.EndpointID = endpointID
+	tunnel.InstanceID = &inst.ID
+	tunnel.TCPRx = inst.TCPRx
+	tunnel.TCPTx = inst.TCPTx
+	tunnel.UDPRx = inst.UDPRx
+	tunnel.UDPTx = inst.UDPTx
+	tunnel.TCPs = inst.TCPs
+	tunnel.UDPs = inst.UDPs
+	tunnel.Pool = inst.Pool
+	tunnel.Ping = inst.Ping
+	// tunnel.LastEventTime = &payload.TimeStamp
+	tunnel.EnableLogStore = true
+	tunnel.Restart = inst.Restart
+	if inst.Alias != nil && *inst.Alias != "" {
+		tunnel.Name = *inst.Alias
+	} else {
+		tunnel.Name = inst.ID
+	}
+	tunnel.Status = models.TunnelStatus(inst.Status)
+	if inst.Meta != nil {
+		tunnel.Tags = inst.Meta.Tags
+		tunnel.Peer = inst.Meta.Peer
+	}
+
+	return tunnel
+}
+
+// refreshTunnels 同步指定端点的隧道信息
+func (h *EndpointHandler) refreshTunnels(endpointID int64) error {
+	log.Infof("[API] 刷新端点 %v 的隧道信息", endpointID)
+
+	// 获取实例列表
+	instances, err := nowhere.GetInstances(endpointID)
+	if err != nil {
+		log.Errorf("[API] 获取实例列表失败: %v", err)
+		return fmt.Errorf("获取实例列表失败: %v", err)
+	}
+
+	db := h.endpointService.DB()
+	if db == nil {
+		return fmt.Errorf("数据库连接不可用")
+	}
+
+	// 记录 Nowhere 实例 ID，便于后续删除不存在的隧道
+	instanceIDSet := make(map[string]struct{})
+
+	// 使用事务执行
+	err = db.Transaction(func(tx *gorm.DB) error {
+		// 处理每个实例
+		for _, inst := range instances {
+			if inst.Type != string(models.TunnelTypePortal) {
+				log.Debugf("[API] 端点 %d: 跳过非隧道实例 %s (type=%s)", endpointID, inst.ID, inst.Type)
+				continue
+			}
+
+			instanceIDSet[inst.ID] = struct{}{}
+
+			// 使用新的 buildTunnelFromInstance 方法构建隧道模型
+			tunnel := buildTunnelFromInstance(endpointID, inst)
+			if tunnel == nil {
+				log.Warnf("[API] 端点 %d: 无法构建隧道模型，跳过实例 %s", endpointID, inst.ID)
+				continue
+			}
+
+			// 检查隧道是否已存在
+			var existingTunnel models.Tunnel
+			err := tx.Where("endpoint_id = ? AND instance_id = ?", endpointID, inst.ID).First(&existingTunnel).Error
+
+			if err == gorm.ErrRecordNotFound {
+				// 创建新隧道 - 类似 handleInitialEvent 逻辑
+				if err = tx.Create(tunnel).Error; err != nil {
+					log.Errorf("[API] 端点 %d: 创建隧道 %s 失败: %v", endpointID, inst.ID, err)
+					return fmt.Errorf("创建隧道失败: %v", err)
+				}
+				log.Infof("[API] 端点 %d: 创建新隧道 %s (%s)", endpointID, inst.ID, tunnel.Name)
+			} else if err != nil {
+				// 查询出错
+				log.Errorf("[API] 端点 %d: 查询隧道 %s 失败: %v", endpointID, inst.ID, err)
+				return fmt.Errorf("查询隧道失败: %v", err)
+			} else {
+				updates := nowhere.TunnelToMap(tunnel)
+				if err = tx.Model(&models.Tunnel{}).Where("id = ?", existingTunnel.ID).Updates(updates).Error; err != nil {
+					log.Errorf("[API] 端点 %d: 更新隧道 %s 失败: %v", endpointID, inst.ID, err)
+					return fmt.Errorf("更新隧道失败: %v", err)
+				}
+				log.Debugf("[API] 端点 %d: 更新隧道 %s (%s) 运行时信息", endpointID, inst.ID, tunnel.Name)
+			}
+		}
+
+		// 删除不再存在的隧道
+		var existingTunnels []models.Tunnel
+		if err = tx.Select("id, instance_id").Where("endpoint_id = ? AND type = ?", endpointID, models.TunnelTypePortal).Find(&existingTunnels).Error; err != nil {
+			return fmt.Errorf("查询现有隧道失败: %v", err)
+		}
+
+		for _, tunnel := range existingTunnels {
+			if tunnel.InstanceID != nil {
+				if _, exists := instanceIDSet[*tunnel.InstanceID]; !exists {
+					if err = subscription.NewService(tx).AccountTunnels([]int64{tunnel.ID}); err != nil {
+						return fmt.Errorf("结算订阅流量失败: %v", err)
+					}
+					// 先删除相关的操作日志记录，避免外键约束错误
+					if err = tx.Where("tunnel_id = ?", tunnel.ID).Delete(&models.TunnelOperationLog{}).Error; err != nil {
+						log.Warnf("[API] 删除隧道 %d 操作日志失败: %v", tunnel.ID, err)
+					}
+
+					if err = tx.Delete(&models.Tunnel{}, tunnel.ID).Error; err != nil {
+						return fmt.Errorf("删除隧道失败: %v", err)
+					}
+					log.Infof("[API] 端点 %d: 删除不存在的隧道 %d (实例 %s)", endpointID, tunnel.ID, *tunnel.InstanceID)
+				}
+			}
+		}
+
+		log.Debugf("[API] 端点 %d: 隧道信息同步完成", endpointID)
+		return nil
+	})
+
+	// 如果事务成功，异步更新隧道计数和主控信息
+	if err == nil {
+		go func(id int64) {
+			time.Sleep(50 * time.Millisecond)
+
+			// 更新隧道计数
+			updateEndpointTunnelCount(id)
+
+			// 获取并更新主控信息
+			h.fetchAndUpdateEndpointInfo(id)
+		}(endpointID)
+	}
+
+	return err
+}
+
+// testEndpointConnection 测试端点连接是否可用
+func (h *EndpointHandler) testEndpointConnection(url, apiPath, apiKey string, timeoutMs int) error {
+	testURL := url + apiPath + "/events"
+
+	client := &http.Client{
+		Timeout: time.Duration(timeoutMs) * time.Millisecond,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	httpReq, err := http.NewRequest("GET", testURL, nil)
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %v", err)
+	}
+	httpReq.Header.Set("X-API-Key", apiKey)
+	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("Cache-Control", "no-cache")
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("连接失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP错误: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// HandleGetEndpointInfo 获取端点系统信息
+func (h *EndpointHandler) HandleGetEndpointInfo(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid endpoint ID",
+		})
+		return
+	}
+
+	// 获取端点信息
+	ep, err := h.endpointService.GetEndpointByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, endpoint.EndpointResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	// 尝试获取系统信息 (处理低版本API不存在的情况)
+	var info *nowhere.EndpointInfoResult
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Warnf("[Master-%v] 获取系统信息失败(可能为低版本): %v", ep.ID, r)
+			}
+		}()
+
+		info, err = nowhere.GetInfo(id)
+		if err != nil {
+			log.Warnf("[Master-%v] 获取系统信息失败: %v", ep.ID, err)
+			// 不返回错误，继续处理
+		}
+	}()
+
+	// 如果成功获取到信息，更新数据库
+	if info != nil && err == nil {
+		if updateErr := h.endpointService.UpdateEndpointInfo(id, *info); updateErr != nil {
+			log.Errorf("[Master-%v] 更新系统信息失败: %v", ep.ID, updateErr)
+		} else {
+			// 在日志中显示uptime信息
+			uptimeMsg := fmt.Sprintf("%d秒", info.Uptime)
+			log.Infof("[Master-%v] 系统信息已更新: OS=%s, Arch=%s, Ver=%s, Uptime=%s", ep.ID, info.OS, info.Arch, info.Ver, uptimeMsg)
+		}
+
+		c.JSON(http.StatusOK, endpoint.EndpointResponse{
+			Success:  true,
+			Message:  "System information retrieved successfully",
+			Endpoint: info,
+		})
+	} else {
+		// 返回当前已存储的信息
+		var storedUptime *int64
+		if ep.Uptime != nil && *ep.Uptime > 0 {
+			storedUptime = ep.Uptime
+		}
+
+		infoResponse := endpoint.NowhereInfo{
+			OS: func() string {
+				if ep.OS != nil {
+					return *ep.OS
+				}
+				return ""
+			}(),
+			Arch: func() string {
+				if ep.Arch != nil {
+					return *ep.Arch
+				}
+				return ""
+			}(),
+			Ver: func() string {
+				if ep.Ver != nil {
+					return *ep.Ver
+				}
+				return ""
+			}(),
+			Name: ep.Name,
+			Log: func() string {
+				if ep.Log != nil {
+					return *ep.Log
+				}
+				return ""
+			}(),
+			TLS: func() string {
+				if ep.TLS != nil {
+					return *ep.TLS
+				}
+				return ""
+			}(),
+			Crt: func() string {
+				if ep.Crt != nil {
+					return *ep.Crt
+				}
+				return ""
+			}(),
+			Key: func() string {
+				if ep.KeyPath != nil {
+					return *ep.KeyPath
+				}
+				return ""
+			}(),
+			Uptime: storedUptime,
+		}
+
+		c.JSON(http.StatusOK, endpoint.EndpointResponse{
+			Success:  true,
+			Message:  "Returning stored system information",
+			Endpoint: infoResponse,
+		})
+	}
+}
+
+// HandleGetEndpointDetail 获取端点详细信息
+func (h *EndpointHandler) HandleGetEndpointDetail(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid endpoint ID",
+		})
+		return
+	}
+
+	// 先获取端点基本信息（用于连接Nowhere API）
+	ep, err := h.endpointService.GetEndpointByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, endpoint.EndpointResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	// 尝试调用Nowhere API获取最新信息并更新数据库
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Warnf("[Master-%v] 获取最新系统信息失败(panic): %v", ep.ID, r)
+			}
+		}()
+
+		// 尝试获取系统信息
+		info, err := nowhere.GetInfo(id)
+		if err != nil {
+			log.Warnf("[Master-%v] 调用Nowhere API获取系统信息失败: %v", ep.ID, err)
+			return
+		}
+
+		if info != nil {
+			// 更新数据库中的系统信息
+			if updateErr := h.endpointService.UpdateEndpointInfo(id, *info); updateErr != nil {
+				log.Errorf("[Master-%v] 更新系统信息到数据库失败: %v", ep.ID, updateErr)
+			} else {
+				// 在日志中显示uptime信息
+				uptimeMsg := fmt.Sprintf("%d秒", info.Uptime)
+				log.Infof("[Master-%v] 详情页刷新：系统信息已更新: OS=%s, Arch=%s, Ver=%s, Uptime=%s", ep.ID, info.OS, info.Arch, info.Ver, uptimeMsg)
+			}
+		}
+	}()
+
+	// 重新从数据库获取最新的端点详细信息
+	updatedEp, err := h.endpointService.GetEndpointByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, endpoint.EndpointResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, endpoint.EndpointResponse{
+		Success:  true,
+		Message:  "Endpoint details retrieved successfully",
+		Endpoint: updatedEp,
+	})
+}
+
+// HandleEndpointFileLogs 获取端点文件日志
+func (h *EndpointHandler) HandleEndpointFileLogs(c *gin.Context) {
+	// Method validation removed - handled by Gin router
+
+	endpointIDStr := c.Param("id")
+	endpointID, err := strconv.ParseInt(endpointIDStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid endpoint ID")
+		return
+	}
+
+	// 获取查询参数
+	instanceID := c.Query("instanceId")
+	dateStr := c.Query("date") // 改为date参数
+	if instanceID == "" {
+		c.String(http.StatusBadRequest, "Missing instanceId parameter")
+		return
+	}
+
+	// 解析日期参数，格式为 YYYY-MM-DD
+	var targetDate time.Time
+	if dateStr != "" {
+		var parseErr error
+		targetDate, parseErr = time.Parse("2006-01-02", dateStr)
+		if parseErr != nil {
+			c.String(http.StatusBadRequest, "Invalid date format, expected YYYY-MM-DD")
+			return
+		}
+	} else {
+		// 如果没有指定日期，默认使用今天
+		targetDate = time.Now()
+	}
+
+	// 从文件日志管理器读取指定日期的日志
+	logs, err := h.sseManager.GetFileLogger().ReadLogs(endpointID, instanceID, targetDate, 1000)
+	if err != nil {
+		log.Warnf("[API]读取文件日志失败: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to read file logs")
+		return
+	}
+
+	// 转换为统一的日志格式
+	var logEntries []map[string]interface{}
+	for i, logLine := range logs {
+		if logLine != "" {
+			// 尝试解析日志行中的时间戳
+			var timestamp time.Time
+			if len(logLine) > 20 && logLine[0] == '[' {
+				timeStr := logLine[1:20]
+				if parsedTime, err := time.Parse("2006-01-02 15:04:05", timeStr); err == nil {
+					timestamp = parsedTime
+				} else {
+					timestamp = targetDate // 如果解析失败，使用目标日期
+				}
+			} else {
+				timestamp = targetDate // 如果没有时间戳，使用目标日期
+			}
+
+			logEntries = append(logEntries, map[string]interface{}{
+				"id":        i + 1,
+				"message":   processAnsiColors(logLine), // 处理ANSI颜色
+				"content":   processAnsiColors(logLine), // 保持向后兼容
+				"isHtml":    true,
+				"timestamp": timestamp,
+				"filePath":  fmt.Sprintf("%s.log", targetDate.Format("2006-01-02")),
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"success":   true,
+		"logs":      logEntries,
+		"storage":   "file",
+		"date":      targetDate.Format("2006-01-02"),
+		"timestamp": time.Now(),
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// HandleClearEndpointFileLogs 清空端点文件日志
+func (h *EndpointHandler) HandleClearEndpointFileLogs(c *gin.Context) {
+	// Method validation removed - handled by Gin router
+
+	endpointIDStr := c.Param("id")
+	endpointID, err := strconv.ParseInt(endpointIDStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid endpoint ID")
+		return
+	}
+
+	// 获取查询参数，instanceId 为空时清空整个端点的所有日志
+	instanceID := c.Query("instanceId")
+
+	fileLogger := h.sseManager.GetFileLogger()
+	if fileLogger == nil {
+		c.String(http.StatusInternalServerError, "File logger not initialized")
+		return
+	}
+
+	if instanceID == "" {
+		err = fileLogger.ClearAllLogs(endpointID)
+	} else {
+		err = fileLogger.ClearLogs(endpointID, instanceID)
+	}
+	if err != nil {
+		log.Warnf("[API]清空文件日志失败: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to clear file logs")
+		return
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": "File logs cleared successfully",
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// HandleEndpointStats 获取端点统计信息
+// GET /api/endpoints/{id}/stats
+func (h *EndpointHandler) HandleEndpointStats(c *gin.Context) {
+	// Method validation removed - handled by Gin router
+
+	endpointIDStr := c.Param("id")
+	endpointID, err := strconv.ParseInt(endpointIDStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid endpoint ID")
+		return
+	}
+
+	// 获取隧道数量和流量统计
+	tunnelCount, totalTcpIn, totalTcpOut, totalUdpIn, totalUdpOut, err := h.getTunnelStats(endpointID)
+	if err != nil {
+		log.Errorf("获取隧道统计失败: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to get tunnel statistics")
+		return
+	}
+
+	// 获取文件日志统计
+	fileLogCount, fileLogSize, err := h.getFileLogStats(endpointID)
+	if err != nil {
+		log.Errorf("获取文件日志统计失败: %v", err)
+		// 文件日志统计失败不影响其他统计，设置为0
+		fileLogCount = 0
+		fileLogSize = 0
+	}
+
+	// 计算总流量
+	totalTrafficIn := totalTcpIn + totalUdpIn
+	totalTrafficOut := totalTcpOut + totalUdpOut
+
+	stats := map[string]interface{}{
+		"tunnelCount":     tunnelCount,
+		"fileLogCount":    fileLogCount,
+		"fileLogSize":     fileLogSize,
+		"totalTrafficIn":  totalTrafficIn,
+		"totalTrafficOut": totalTrafficOut,
+		"tcpTrafficIn":    totalTcpIn,
+		"tcpTrafficOut":   totalTcpOut,
+		"udpTrafficIn":    totalUdpIn,
+		"udpTrafficOut":   totalUdpOut,
+	}
+
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data":    stats,
+	})
+}
+
+// getTunnelStats 获取隧道数量和流量统计
+func (h *EndpointHandler) getTunnelStats(endpointID int64) (int, int64, int64, int64, int64, error) {
+	var result struct {
+		Count  int   `json:"count"`
+		TcpIn  int64 `json:"tcp_in"`
+		TcpOut int64 `json:"tcp_out"`
+		UdpIn  int64 `json:"udp_in"`
+		UdpOut int64 `json:"udp_out"`
+	}
+
+	err := h.endpointService.DB().Raw(`
+		SELECT 
+			COUNT(*) as count,
+			COALESCE(SUM(tcp_rx), 0) as tcp_in,
+			COALESCE(SUM(tcp_tx), 0) as tcp_out,
+			COALESCE(SUM(udp_rx), 0) as udp_in,
+			COALESCE(SUM(udp_tx), 0) as udp_out
+		FROM tunnels 
+		WHERE endpoint_id = ?
+	`, endpointID).Scan(&result).Error
+
+	return result.Count, result.TcpIn, result.TcpOut, result.UdpIn, result.UdpOut, err
+}
+
+// getFileLogStats 获取文件日志统计
+func (h *EndpointHandler) getFileLogStats(endpointID int64) (int, int64, error) {
+	if h.sseManager == nil {
+		return 0, 0, fmt.Errorf("SSE manager not initialized")
+	}
+
+	// 获取文件日志管理器
+	fileLogger := h.sseManager.GetFileLogger()
+	if fileLogger == nil {
+		return 0, 0, fmt.Errorf("File logger not initialized")
+	}
+
+	// 计算该端点的文件日志统计
+	endpointDir := fmt.Sprintf("logs/endpoint_%d", endpointID)
+	fileCount, totalSize := h.calculateDirStats(endpointDir)
+
+	return fileCount, totalSize, nil
+}
+
+// calculateDirStats 计算目录下的文件统计
+func (h *EndpointHandler) calculateDirStats(dirPath string) (int, int64) {
+	fileCount := 0
+	totalSize := int64(0)
+
+	filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // 忽略错误，继续处理
+		}
+
+		if !info.IsDir() && filepath.Ext(path) == ".log" {
+			fileCount++
+			totalSize += info.Size()
+		}
+
+		return nil
+	})
+
+	return fileCount, totalSize
+}
+
+// updateEndpointTunnelCount 更新端点的隧道计数，使用重试机制避免死锁
+func updateEndpointTunnelCount(endpointID int64) {
+	err := db.ExecuteWithRetry(func(db *gorm.DB) error {
+		return db.Model(&models.Endpoint{}).Where("id = ?", endpointID).
+			Update("tunnel_count", gorm.Expr("(SELECT COUNT(*) FROM tunnels WHERE endpoint_id = ?)", endpointID)).Error
+	})
+
+	if err != nil {
+		log.Errorf("[API]更新端点 %d 隧道计数失败: %v", endpointID, err)
+	} else {
+		log.Debugf("[API]端点 %d 隧道计数已更新", endpointID)
+	}
+}
+
+// fetchAndUpdateEndpointInfo 获取并更新端点系统信息和hostname
+func (h *EndpointHandler) fetchAndUpdateEndpointInfo(endpointID int64) {
+	// 首先获取端点信息以获取URL用于提取hostname
+	var endpointModel models.Endpoint
+	if err := h.endpointService.DB().First(&endpointModel, endpointID).Error; err != nil {
+		log.Warnf("[Master-%d] 获取端点信息失败: %v", endpointID, err)
+		return
+	}
+
+	// 从URL中提取hostname并更新
+	hostname := endpoint.ExtractHostFromURL(endpointModel.URL)
+	if hostname != "" {
+		updates := map[string]interface{}{
+			"hostname":   hostname,
+			"updated_at": time.Now(),
+		}
+		if err := h.endpointService.DB().Model(&models.Endpoint{}).Where("id = ?", endpointID).Updates(updates).Error; err != nil {
+			log.Errorf("[Master-%d] 更新hostname失败: %v", endpointID, err)
+		} else {
+			log.Debugf("[Master-%d] Hostname已更新: %s", endpointID, hostname)
+		}
+	}
+
+	// 尝试获取系统信息 (处理低版本API不存在的情况)
+	info, err := nowhere.GetInfo(endpointID)
+	if err != nil {
+		log.Warnf("[Master-%d] 获取系统信息失败: %v", endpointID, err)
+		// 不返回错误，继续处理
+		return
+	}
+
+	// 如果成功获取到信息，更新数据库
+	if info != nil {
+		if updateErr := h.endpointService.UpdateEndpointInfo(endpointID, *info); updateErr != nil {
+			log.Errorf("[Master-%d] 更新系统信息失败: %v", endpointID, updateErr)
+		} else {
+			// 在日志中显示uptime信息
+			uptimeMsg := fmt.Sprintf("%d秒", info.Uptime)
+			log.Infof("[Master-%d] 系统信息已更新: OS=%s, Arch=%s, Ver=%s, Uptime=%s", endpointID, info.OS, info.Arch, info.Ver, uptimeMsg)
+		}
+	}
+}
+
+// HandleGetAvailableLogDates 获取指定端点和实例的可用日志日期列表
+func (h *EndpointHandler) HandleGetAvailableLogDates(c *gin.Context) {
+	// Method validation removed - handled by Gin router
+
+	endpointIDStr := c.Param("id")
+	endpointID, err := strconv.ParseInt(endpointIDStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid endpoint ID")
+		return
+	}
+
+	// 获取查询参数
+	instanceID := c.Query("instanceId")
+	if instanceID == "" {
+		c.String(http.StatusBadRequest, "Missing instanceId parameter")
+		return
+	}
+
+	// 从文件日志管理器获取可用的日志日期
+	dates, err := h.sseManager.GetFileLogger().GetAvailableLogDates(endpointID, instanceID)
+	if err != nil {
+		log.Warnf("[API]获取可用日志日期失败: %v", err)
+		c.String(http.StatusInternalServerError, "Failed to get available log dates")
+		return
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"dates":   dates,
+		"count":   len(dates),
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// HandleTCPing TCPing诊断测试 (POST /api/endpoints/{id}/tcping)
+func (h *EndpointHandler) HandleTCPing(c *gin.Context) {
+	// Method validation removed - handled by Gin router
+
+	endpointIDStr := c.Param("id")
+	endpointID, err := strconv.ParseInt(endpointIDStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid endpoint ID")
+		return
+	}
+
+	// 解析请求体
+	var req struct {
+		Target string `json:"target"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.String(http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Target == "" {
+		c.String(http.StatusBadRequest, "Missing target parameter")
+		return
+	}
+
+	// 获取端点信息
+	var endpoint struct {
+		URL     string
+		APIPath string
+		APIKey  string
+	}
+
+	db := h.endpointService.DB()
+	if err := db.Raw(`SELECT url, api_path, api_key FROM endpoints WHERE id = ?`, endpointID).Scan(&endpoint).Error; err != nil {
+		if err == sql.ErrNoRows {
+			c.String(http.StatusNotFound, "Endpoint not found")
+			return
+		}
+		c.String(http.StatusInternalServerError, "Failed to get endpoint info")
+		return
+	}
+
+	// 调用Nowhere的TCPing接口
+	result, err := nowhere.TCPing(endpointID, req.Target)
+	if err != nil {
+		log.Errorf("[API]TCPing测试失败: target=%s, err=%v", req.Target, err)
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// 返回结果
+	response := map[string]interface{}{
+		"success": true,
+		"result":  result,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// HandleNetworkDebug 网络诊断测试 (POST /api/endpoints/{id}/network-debug)
+func (h *EndpointHandler) HandleNetworkDebug(c *gin.Context) {
+	endpointIDStr := c.Param("id")
+	endpointID, err := strconv.ParseInt(endpointIDStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid endpoint ID")
+		return
+	}
+
+	// 解析请求体
+	var req struct {
+		Target string `json:"target"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.String(http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Target == "" {
+		c.String(http.StatusBadRequest, "Missing target parameter")
+		return
+	}
+
+	// 获取端点信息
+	var endpoint struct {
+		URL     string
+		APIPath string
+		APIKey  string
+	}
+
+	db := h.endpointService.DB()
+	if err := db.Raw(`SELECT url, api_path, api_key FROM endpoints WHERE id = ?`, endpointID).Scan(&endpoint).Error; err != nil {
+		if err == sql.ErrNoRows {
+			c.String(http.StatusNotFound, "Endpoint not found")
+			return
+		}
+		c.String(http.StatusInternalServerError, "Failed to get endpoint info")
+		return
+	}
+
+	// 调用Nowhere的单次TCPing接口（现在使用Resty实现）
+	result, err := nowhere.SingleTCPing(endpointID, req.Target)
+	if err != nil {
+		log.Errorf("[API]网络诊断测试失败: target=%s, err=%v", req.Target, err)
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// 直接返回 singleResult
+	c.JSON(http.StatusOK, result)
+}
+
+// HandleResetApiKey 重置API密钥 (POST /api/endpoints/{id}/reset-key)
+func (h *EndpointHandler) HandleResetApiKey(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Invalid endpoint ID",
+		})
+		return
+	}
+
+	// 获取端点信息
+	ep, err := h.endpointService.GetEndpointByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, endpoint.EndpointResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	log.Infof("[Master-%v] 开始重置API密钥", id)
+
+	// 1. 调用Nowhere API重置密钥
+	newAPIKey, err := h.resetNowhereAPIKey(id, ep)
+	if err != nil {
+		log.Errorf("[Master-%v] 调用Nowhere重置密钥失败: %v", id, err)
+		c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Failed to reset key: " + err.Error(),
+		})
+		return
+	}
+
+	// 2. 更新数据库中的API密钥（UpdateEndpoint内部会自动更新缓存）
+	updateReq := endpoint.UpdateEndpointRequest{
+		ID:     id,
+		Action: "updateApiKey",
+		APIKey: newAPIKey,
+	}
+
+	_, err = h.endpointService.UpdateEndpoint(updateReq)
+	if err != nil {
+		log.Errorf("[Master-%v] 更新数据库中的新密钥失败: %v", id, err)
+		c.JSON(http.StatusInternalServerError, endpoint.EndpointResponse{
+			Success: false,
+			Error:   "Failed to update new key: " + err.Error(),
+		})
+		return
+	}
+
+	log.Infof("[Master-%v] API密钥重置成功，缓存已更新: %v", id, newAPIKey)
+
+	c.JSON(http.StatusOK, endpoint.EndpointResponse{
+		Success: true,
+		Message: "API key reset successfully",
+	})
+}
+
+// resetNowhereAPIKey 调用Nowhere API重置密钥
+func (h *EndpointHandler) resetNowhereAPIKey(endpointID int64, ep *endpoint.Endpoint) (string, error) {
+	// Nowhere重置密钥需要调用nowhere.PatchInstance方法，传递instanceID="********"和action="restart"
+	// 根据注释，重置后的新密钥会在返回的result.url字段中
+
+	log.Infof("[Master-%v] 调用Nowhere PatchInstance重置密钥，instanceID=********", endpointID)
+
+	// 构造patchBody，注意字段是小写的unexported字段，我们需要通过现有的方法来调用
+	// 使用现有的ControlInstance方法，它内部会构造正确的patchBody
+	result, err := nowhere.ControlInstance(endpointID, "********", "restart")
+	log.Infof("[Master-%v] Nowhere PatchInstance重置密钥结果: %+v", endpointID, result)
+	if err != nil {
+		return "", fmt.Errorf("PatchInstance call failed: %v", err)
+	}
+
+	// 从返回结果中获取新的API密钥（在URL字段中）
+	if result.URL == "" {
+		return "", fmt.Errorf("Nowhere did not return a new API key")
+	}
+
+	log.Infof("[Master-%v] Nowhere重置密钥成功，获得新密钥", endpointID)
+	return result.URL, nil
+}
+
+// parseFullURL 从完整URL中分离baseURL和apiPath
+func (h *EndpointHandler) parseFullURL(fullURL string) *struct {
+	BaseURL string
+	APIPath string
+} {
+	// 使用正则表达式解析 protocol://host:port/path 格式
+	// 例如：https://example.com:8080/api/v2 -> baseURL: https://example.com:8080, apiPath: /api/v2
+	if fullURL == "" {
+		return nil
+	}
+
+	// 查找第三个/的位置，它分隔baseURL和path
+	slashCount := 0
+	splitIndex := -1
+	for i, char := range fullURL {
+		if char == '/' {
+			slashCount++
+			if slashCount == 3 {
+				splitIndex = i
+				break
+			}
+		}
+	}
+
+	if splitIndex == -1 {
+		// 没有找到 path 时使用 OpenCtrl 的默认 API 路径。
+		return &struct {
+			BaseURL string
+			APIPath string
+		}{
+			BaseURL: fullURL,
+			APIPath: "/api/v2",
+		}
+	}
+
+	baseURL := fullURL[:splitIndex]
+	apiPath := fullURL[splitIndex:]
+	if apiPath == "" {
+		apiPath = "/api/v2"
+	}
+
+	return &struct {
+		BaseURL string
+		APIPath string
+	}{
+		BaseURL: baseURL,
+		APIPath: apiPath,
+	}
+}
+
+// HandleTestConnection 测试端点连接 (POST /api/endpoints/{id}/test-connection)
+func (h *EndpointHandler) HandleTestConnection(c *gin.Context) {
+	endpointIDStr := c.Param("id")
+	endpointID, err := strconv.ParseInt(endpointIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid endpoint ID"})
+		return
+	}
+
+	// 调用nowhere client的测试连接方法（现在使用Resty实现）
+	if err := nowhere.TestConnection(endpointID); err != nil {
+		log.Errorf("[API]测试端点连接失败: endpointID=%d, err=%v", endpointID, err)
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Connection test passed",
+	})
+}

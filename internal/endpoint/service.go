@@ -1,0 +1,536 @@
+package endpoint
+
+import (
+	"NowhereDash/internal/db/dialect"
+	"NowhereDash/internal/models"
+	"NowhereDash/internal/nowhere"
+	"NowhereDash/internal/subscription"
+	"errors"
+	"fmt"
+	"net/url"
+	"strings"
+	"time"
+
+	"gorm.io/gorm"
+)
+
+// Service 端点管理服务
+type Service struct {
+	db *gorm.DB
+}
+
+var optionalEndpointCleanupTables = []string{
+	"traffic_archive_records",
+	"status_change_records",
+	"traffic_history",
+}
+
+// NewService 创建端点服务实例
+func NewService(db *gorm.DB) *Service {
+	return &Service{db: db}
+}
+
+// DB 返回底层 *gorm.DB 以便其他层访问
+func (s *Service) DB() *gorm.DB {
+	return s.db
+}
+
+// EndpointNameExists reports whether a name is already registered.
+func (s *Service) EndpointNameExists(name string) (bool, error) {
+	var count int64
+	if err := s.db.Model(&models.Endpoint{}).Where("name = ?", strings.TrimSpace(name)).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// GetEndpoints 获取所有端点列表
+func (s *Service) GetEndpoints() ([]EndpointWithStats, error) {
+	var endpoints []EndpointWithStats
+
+	err := s.db.Table("endpoints e").
+		Order("e.created_at DESC").
+		Scan(&endpoints).Error
+
+	// 确保返回空数组而不是nil
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果没有数据，返回空数组
+	if endpoints == nil {
+		endpoints = []EndpointWithStats{}
+	}
+
+	return endpoints, nil
+}
+
+// ExtractHostFromURL extracts the host name or IP address from an endpoint URL.
+func ExtractHostFromURL(urlStr string) string {
+	// 尝试解析URL
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		// 如果URL解析失败，尝试手动提取
+		return extractHostFromString(urlStr)
+	}
+
+	// 从解析后的URL中提取主机名
+	host := parsedURL.Hostname()
+	if host == "" {
+		return ""
+	}
+
+	// 检查是否为IPv6地址（包含冒号）
+	if strings.Contains(host, ":") {
+		// IPv6地址需要用方括号包裹
+		return "[" + host + "]"
+	}
+
+	// 返回主机名（域名或IPv4地址）
+	return host
+}
+
+// extractHostFromString 从字符串中手动提取host部分（备用方法）
+func extractHostFromString(input string) string {
+	// 去除协议部分
+	if idx := strings.Index(input, "://"); idx != -1 {
+		input = input[idx+3:]
+	}
+
+	// 去除用户认证信息
+	if atIdx := strings.Index(input, "@"); atIdx != -1 {
+		input = input[atIdx+1:]
+	}
+
+	// 去除路径部分
+	if slashIdx := strings.Index(input, "/"); slashIdx != -1 {
+		input = input[:slashIdx]
+	}
+
+	// 去除查询参数
+	if queryIdx := strings.Index(input, "?"); queryIdx != -1 {
+		input = input[:queryIdx]
+	}
+
+	// 去除端口部分
+	if colonIdx := strings.Index(input, ":"); colonIdx != -1 {
+		input = input[:colonIdx]
+	}
+
+	return input
+}
+
+// CreateEndpoint 创建新端点
+func (s *Service) CreateEndpoint(req CreateEndpointRequest) (*Endpoint, error) {
+	req.URL = strings.TrimRight(strings.TrimSpace(req.URL), "/")
+	req.APIPath = nowhere.NormalizeAPIPath(req.APIPath)
+
+	// 检查名称是否重复
+	nameExists, err := s.EndpointNameExists(req.Name)
+	if err != nil {
+		return nil, err
+	}
+	if nameExists {
+		return nil, errors.New("端点名称已存在")
+	}
+
+	// 检查URL是否重复
+	var count int64
+	if err := s.db.Model(&models.Endpoint{}).Where("url = ?", req.URL).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		return nil, errors.New("该URL已存在")
+	}
+
+	// 确定连接IP：优先使用请求中的hostname，如果为空则从URL中提取
+	hostname := req.Hostname
+	if hostname == "" {
+		hostname = ExtractHostFromURL(req.URL)
+	}
+
+	// 创建新端点
+	endpoint := &models.Endpoint{
+		Name:      req.Name,
+		URL:       req.URL,
+		Hostname:  hostname, // 使用指定的或提取的IP地址
+		APIPath:   req.APIPath,
+		APIKey:    req.APIKey,
+		Status:    StatusOffline,
+		LastCheck: time.Now(),
+	}
+
+	if err := s.db.Create(endpoint).Error; err != nil {
+		return nil, err
+	}
+
+	// 添加到缓存
+	nowhere.GetCache().Set(fmt.Sprintf("%d", endpoint.ID), nowhere.BuildAPIBaseURL(endpoint.URL, endpoint.APIPath), endpoint.APIKey)
+
+	return endpoint, nil
+}
+
+// UpdateEndpoint 更新端点信息
+func (s *Service) UpdateEndpoint(req UpdateEndpointRequest) (*Endpoint, error) {
+	if req.URL != "" {
+		req.URL = strings.TrimRight(strings.TrimSpace(req.URL), "/")
+	}
+	if req.APIPath != "" {
+		req.APIPath = nowhere.NormalizeAPIPath(req.APIPath)
+	}
+
+	// 获取现有端点
+	var endpoint models.Endpoint
+	if err := s.db.First(&endpoint, req.ID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("端点不存在")
+		}
+		return nil, err
+	}
+
+	switch req.Action {
+	case "rename":
+		if req.Name == "" {
+			return nil, errors.New("新名称不能为空")
+		}
+		// 检查新名称是否已存在
+		var count int64
+		if err := s.db.Model(&models.Endpoint{}).Where("name = ? AND id != ?", req.Name, req.ID).Count(&count).Error; err != nil {
+			return nil, err
+		}
+		if count > 0 {
+			return nil, errors.New("端点名称已存在")
+		}
+
+		if err := s.db.Model(&endpoint).Update("name", req.Name).Error; err != nil {
+			return nil, err
+		}
+		endpoint.Name = req.Name
+		// 名称更新不影响缓存，因为缓存只存储ID、URL和APIKey
+
+	case "update":
+		// 检查URL是否重复
+		if req.URL != "" && req.URL != endpoint.URL {
+			var count int64
+			if err := s.db.Model(&models.Endpoint{}).Where("url = ? AND id != ?", req.URL, req.ID).Count(&count).Error; err != nil {
+				return nil, err
+			}
+			if count > 0 {
+				return nil, errors.New("该URL已存在")
+			}
+		}
+
+		// 准备更新数据
+		updates := make(map[string]interface{})
+		if req.Name != "" {
+			updates["name"] = req.Name
+		}
+		if req.URL != "" {
+			updates["url"] = req.URL
+		}
+		if req.APIPath != "" {
+			updates["api_path"] = req.APIPath
+		}
+		if req.APIKey != "" {
+			updates["api_key"] = req.APIKey
+		}
+
+		// 处理 Hostname：优先使用传递的值，如果为空则从URL提取
+		if req.Hostname != "" {
+			// 用户明确指定了 hostname，直接使用
+			updates["hostname"] = req.Hostname
+		} else if req.URL != "" {
+			// Hostname 为空但 URL 有更新，从 URL 中提取
+			if extractedIP := ExtractHostFromURL(req.URL); extractedIP != "" {
+				updates["hostname"] = extractedIP
+			}
+		}
+
+		updates["updated_at"] = time.Now()
+
+		if err := s.db.Model(&endpoint).Updates(updates).Error; err != nil {
+			return nil, err
+		}
+
+		// 重新获取更新后的数据
+		if err := s.db.First(&endpoint, req.ID).Error; err != nil {
+			return nil, err
+		}
+
+		// 更新缓存（只有在URL或APIKey变化时才需要更新）
+		if req.URL != "" || req.APIPath != "" || req.APIKey != "" {
+			nowhere.GetCache().Update(fmt.Sprintf("%d", endpoint.ID), nowhere.BuildAPIBaseURL(endpoint.URL, endpoint.APIPath), endpoint.APIKey)
+		}
+
+	case "updateConfig":
+		// 修改配置：更新名称、URL、API路径、Hostname、可选的API密钥
+		updates := make(map[string]interface{})
+		needUpdateCache := false
+
+		if req.Name != "" {
+			// 检查新名称是否已存在
+			var count int64
+			if err := s.db.Model(&models.Endpoint{}).Where("name = ? AND id != ?", req.Name, req.ID).Count(&count).Error; err != nil {
+				return nil, err
+			}
+			if count > 0 {
+				return nil, errors.New("端点名称已存在")
+			}
+			updates["name"] = req.Name
+		}
+
+		urlChanged := false
+		if req.URL != "" && req.URL != endpoint.URL {
+			// 检查URL是否重复
+			var count int64
+			if err := s.db.Model(&models.Endpoint{}).Where("url = ? AND id != ?", req.URL, req.ID).Count(&count).Error; err != nil {
+				return nil, err
+			}
+			if count > 0 {
+				return nil, errors.New("该URL已存在")
+			}
+			updates["url"] = req.URL
+			urlChanged = true
+			needUpdateCache = true
+		}
+
+		// 处理 Hostname：优先使用传递的值，如果为空则从URL提取
+		if req.Hostname != "" {
+			// 用户明确指定了 hostname，直接使用
+			updates["hostname"] = req.Hostname
+		} else if urlChanged {
+			// Hostname 为空但 URL 有更新，从新 URL 中提取
+			if extractedIP := ExtractHostFromURL(req.URL); extractedIP != "" {
+				updates["hostname"] = extractedIP
+			}
+		}
+
+		if req.APIPath != "" && req.APIPath != endpoint.APIPath {
+			updates["api_path"] = req.APIPath
+			needUpdateCache = true
+		}
+
+		if req.APIKey != "" && req.APIKey != endpoint.APIKey {
+			updates["api_key"] = req.APIKey
+			needUpdateCache = true
+		}
+
+		updates["updated_at"] = time.Now()
+
+		if err := s.db.Model(&endpoint).Updates(updates).Error; err != nil {
+			return nil, err
+		}
+
+		// 重新获取更新后的数据
+		if err := s.db.First(&endpoint, req.ID).Error; err != nil {
+			return nil, err
+		}
+
+		// 更新缓存
+		if needUpdateCache {
+			nowhere.GetCache().Update(fmt.Sprintf("%d", endpoint.ID), nowhere.BuildAPIBaseURL(endpoint.URL, endpoint.APIPath), endpoint.APIKey)
+		}
+
+	case "updateApiKey":
+		// 仅更新API密钥
+		if req.APIKey == "" {
+			return nil, errors.New("API密钥不能为空")
+		}
+
+		updates := map[string]interface{}{
+			"api_key":    req.APIKey,
+			"updated_at": time.Now(),
+		}
+
+		if err := s.db.Model(&endpoint).Updates(updates).Error; err != nil {
+			return nil, err
+		}
+
+		// 重新获取更新后的数据
+		if err := s.db.First(&endpoint, req.ID).Error; err != nil {
+			return nil, err
+		}
+
+		// 更新缓存
+		nowhere.GetCache().Update(fmt.Sprintf("%d", endpoint.ID), nowhere.BuildAPIBaseURL(endpoint.URL, endpoint.APIPath), endpoint.APIKey)
+	}
+
+	return &endpoint, nil
+}
+
+// DeleteEndpoint 删除端点
+func (s *Service) DeleteEndpoint(id int64) error {
+	var tunnelIDs []int64
+	if err := s.db.Model(&models.Tunnel{}).Where("endpoint_id = ?", id).Pluck("id", &tunnelIDs).Error; err != nil {
+		return err
+	}
+	if err := subscription.NewService(s.db).AccountTunnels(tunnelIDs); err != nil {
+		return fmt.Errorf("结算订阅流量失败: %v", err)
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// 1) 删除隧道分组关联表记录（通过隧道ID关联）
+		if err := tx.Exec("DELETE FROM tunnel_groups WHERE tunnel_id IN (SELECT id FROM tunnels WHERE endpoint_id = ?)", id).Error; err != nil {
+			// 忽略记录不存在的错误
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("删除隧道分组关联失败: %v", err)
+			}
+		}
+
+		// 2) 删除隧道操作日志，避免外键约束错误
+		if err := tx.Exec("DELETE FROM tunnel_operation_logs WHERE tunnel_id IN (SELECT id FROM tunnels WHERE endpoint_id = ?)", id).Error; err != nil {
+			// 忽略记录不存在的错误
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("删除隧道操作日志失败: %v", err)
+			}
+		}
+
+		// 3) 删除关联隧道
+		if err := tx.Where("endpoint_id = ?", id).Delete(&models.Tunnel{}).Error; err != nil {
+			return err
+		}
+
+		// 5) 删除流量历史汇总记录
+		if err := tx.Exec("DELETE FROM traffic_hourly_summary WHERE endpoint_id = ?", id).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("删除流量历史记录失败: %v", err)
+			}
+		}
+
+		// 6) 删除服务历史记录
+		if err := tx.Where("endpoint_id = ?", id).Delete(&models.ServiceHistory{}).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("删除服务历史记录失败: %v", err)
+			}
+		}
+
+		// 7-9) 删除可选历史/归档表记录。PG 事务中不能先触发缺表错误再忽略，
+		// 否则后续 SQL 会进入 current transaction is aborted 状态。
+		for _, tableName := range optionalEndpointCleanupTables {
+			if err := deleteEndpointRowsIfTableExists(tx, tableName, id); err != nil {
+				return err
+			}
+		}
+
+		// 10) 删除端点
+		result := tx.Delete(&models.Endpoint{}, id)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errors.New("端点不存在")
+		}
+
+		// 11) 从缓存中删除
+		nowhere.GetCache().Delete(fmt.Sprintf("%d", id))
+
+		return nil
+	})
+}
+
+func deleteEndpointRowsIfTableExists(tx *gorm.DB, tableName string, endpointID int64) error {
+	exists, err := tableExists(tx, tableName)
+	if err != nil {
+		return fmt.Errorf("检查表 %s 是否存在失败: %v", tableName, err)
+	}
+	if !exists {
+		return nil
+	}
+
+	if err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE endpoint_id = ?", tableName), endpointID).Error; err != nil {
+		return fmt.Errorf("删除 %s 记录失败: %v", tableName, err)
+	}
+	return nil
+}
+
+func tableExists(tx *gorm.DB, tableName string) (bool, error) {
+	d := dialect.For(tx.Dialector.Name())
+	if d == nil {
+		return tx.Migrator().HasTable(tableName), nil
+	}
+
+	var count int64
+	if err := tx.Raw(d.TableExistsSQL(tableName)).Scan(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// UpdateEndpointStatus 更新端点状态
+func (s *Service) UpdateEndpointStatus(id int64, status EndpointStatus) error {
+	return s.db.Model(&models.Endpoint{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"status":     status,
+		"last_check": time.Now(),
+	}).Error
+}
+
+// GetEndpointByID 根据ID获取端点信息
+func (s *Service) GetEndpointByID(id int64) (*Endpoint, error) {
+	var endpoint models.Endpoint
+	if err := s.db.First(&endpoint, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("端点不存在")
+		}
+		return nil, err
+	}
+	return &endpoint, nil
+}
+
+// SimpleEndpoint 简化端点信息结构
+type SimpleEndpoint struct {
+	ID          int64          `json:"id"`
+	Name        string         `json:"name"`
+	URL         string         `json:"url"`
+	APIPath     string         `json:"apiPath"`
+	Status      EndpointStatus `json:"status"`
+	TunnelCount int            `json:"tunnelCount"`
+	Ver         string         `json:"version"`
+	TLS         string         `json:"tls"`
+	Log         string         `json:"log"`
+	Crt         string         `json:"crt"`
+	KeyPath     string         `json:"keyPath"`
+	Uptime      *int64         `json:"uptime,omitempty"`
+}
+
+// GetSimpleEndpoints 获取简化端点列表，可排除 FAIL
+func (s *Service) GetSimpleEndpoints(excludeFail bool) ([]SimpleEndpoint, error) {
+	query := s.db.Table("endpoints e").
+		Select("e.id, e.name, e.hostname as url, e.api_path, e.status,  e.tunnel_count, e.ver, e.tls, e.log, e.crt, e.key_path, e.uptime")
+
+	if excludeFail {
+		query = query.Where("e.status NOT IN ('FAIL', 'DISCONNECT')")
+	}
+
+	var endpoints []SimpleEndpoint
+	err := query.Order("e.created_at DESC").Scan(&endpoints).Error
+
+	// 确保返回空数组而不是nil
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果没有数据，返回空数组
+	if endpoints == nil {
+		endpoints = []SimpleEndpoint{}
+	}
+
+	return endpoints, nil
+}
+
+// UpdateEndpointInfo 更新端点的系统信息
+func (s *Service) UpdateEndpointInfo(id int64, info nowhere.EndpointInfoResult) error {
+	updates := map[string]interface{}{
+		"os":         info.OS,
+		"arch":       info.Arch,
+		"ver":        info.Ver,
+		"log":        info.Log,
+		"tls":        info.TLS,
+		"crt":        info.Crt,
+		"key_path":   info.Key,
+		"updated_at": time.Now(),
+	}
+
+	// 处理uptime字段
+	updates["uptime"] = info.Uptime
+
+	return s.db.Model(&models.Endpoint{}).Where("id = ?", id).Updates(updates).Error
+}

@@ -1,0 +1,102 @@
+name: Docker CI (beta)
+
+on:
+  push:
+    tags: [ 'v*.*.*-beta*' ]
+    branches: [ '*-beta*' ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整的 git 历史，包括 tags
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📝 获取Beta版本信息
+        id: get_version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # Tag触发处理
+            RAW_VERSION=${GITHUB_REF#refs/tags/}
+            
+            # 处理 v*.*.*-beta* 格式的标签
+            # v2.0.0-beta1 -> 2.0.0-beta1
+            if [[ $RAW_VERSION =~ ^v([0-9]+\.[0-9]+\.[0-9]+-(beta|alpha|rc)[0-9]*)$ ]]; then
+              VERSION="${BASH_REMATCH[1]}"
+              IS_BETA_TAG=true
+              echo "✅ Beta标签格式正确: $RAW_VERSION -> $VERSION"
+            else
+              echo "❌ 错误: Beta标签格式不正确，期望格式: v*.*.*-beta*，实际: $RAW_VERSION"
+              exit 1
+            fi
+          else
+            # 分支触发处理
+            VERSION=$(node -p "require('./web/package.json').version")
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            RAW_VERSION="branch-${BRANCH_NAME}"
+            IS_BETA_TAG=false
+            echo "🌿 分支构建: $BRANCH_NAME -> $VERSION"
+          fi
+          
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "raw_version=$RAW_VERSION" >> $GITHUB_OUTPUT
+          echo "repo_name=$REPO_LC" >> $GITHUB_OUTPUT
+          echo "is_beta_tag=$IS_BETA_TAG" >> $GITHUB_OUTPUT
+          echo "is_beta_branch=${{ contains(github.ref, 'beta') && !startsWith(github.ref, 'refs/tags/') }}" >> $GITHUB_OUTPUT
+          echo "📦 Beta版本: $VERSION (原始: $RAW_VERSION)"
+
+      - name: 📋 提取Beta镜像元数据
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.get_version.outputs.repo_name }}
+          tags: |
+            type=raw,value=${{ steps.get_version.outputs.version }}
+            type=raw,value=beta
+
+      - name: 🏗️ 构建和推送 Docker 镜像 (beta)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.get_version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=${{ steps.get_version.outputs.repo_name }}
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+            VERSION=${{ steps.get_version.outputs.version }}
+          platforms: linux/amd64
+#          cache-from: |
+#            type=gha,scope=beta-buildcache
+#          cache-to: |
+#            type=gha,mode=max,scope=beta-buildcache
+
+      - name: 📢 输出Beta版本信息
+        run: |
+          echo "🏷️ 原始版本: ${{ steps.get_version.outputs.raw_version || '分支构建' }}"
+          echo "🏷️ 格式化版本: ${{ steps.get_version.outputs.version }}"
+          echo "📦 镜像标签:"
+          echo "${{ steps.meta.outputs.tags }}" | tr '\n' '\n  '
+          echo "🏗️ 构建架构: linux/amd64" 

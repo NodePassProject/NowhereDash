@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+@import "tailwindcss";
+/* Note: You may need to change the path to fit your project structure */
+@config "../../tailwind.config.js";
+/* 仅为仪表盘统计卡片定义字体变量 */
+:root {
+  --font-inter: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* 仪表盘专用字体类 */
+.font-inter {
+  font-family: var(--font-inter);
+}
+
+/* 自定义滚动条样式 */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--heroui-default-300));
+  border-radius: 3px;
+}
+
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--heroui-default-400));
+}
+
+/* 隐藏滚动条但保持滚动功能 */
+.scrollbar-hide {
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari and Opera */
+}
+
+/* 3D 变换支持 */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.perspective-2000 {
+  perspective: 2000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+/* 3D 旋转效果 */
+.group:hover .group-hover\:rotate-y-2 {
+  transform: rotateY(2deg);
+}
+
+.group:hover .group-hover\:-rotate-x-2 {
+  transform: rotateX(-2deg);
+}
+
+/* 组合效果 */
+.group:hover .group-hover\:rotate-y-2.group-hover\:-rotate-x-2 {
+  transform: rotateY(2deg) rotateX(-2deg);
+}
+
+/* 背景模糊增强 */
+.backdrop-saturate-150 {
+  backdrop-filter: saturate(1.5);
+  -webkit-backdrop-filter: saturate(1.5);
+}

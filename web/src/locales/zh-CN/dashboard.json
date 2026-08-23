@@ -1,0 +1,101 @@
+{
+  "title": "👋 概览",
+  "currentTime": "当前时间",
+  "stats": {
+    "instances": "隧道数",
+    "endpoints": "节点数",
+    "subscriptions": "订阅数",
+    "running": "运行",
+    "stopped": "停止",
+    "error": "错误",
+    "offline": "离线"
+  },
+  "traffic": {
+    "overview": "流量概览",
+    "weeklyStats": "本周统计",
+    "todayTraffic": "今日流量",
+    "totalConsumption": "流量总耗",
+    "loading": "加载流量数据中...",
+    "noData": "暂无流量数据",
+    "noDataDescription": "当有隧道运行时，流量趋势数据将在此显示",
+    "tcpIn": "TCP In",
+    "tcpOut": "TCP Out",
+    "udpIn": "UDP In",
+    "udpOut": "UDP Out"
+  },
+  "subscriptions": {
+    "title": "订阅状态",
+    "activeSummary": "正常订阅",
+    "attentionSummary": "需关注",
+    "portalSummary": "关联隧道",
+    "neverExpires": "永不过期",
+    "expiresOn": "到期 {{date}}",
+    "trafficUsage": "{{name}} 流量用量",
+    "unlimited": "不限流量",
+    "portalCount": "{{count}} 个隧道",
+    "loadFailed": "订阅状态加载失败",
+    "retry": "重试",
+    "emptyTitle": "还没有订阅",
+    "emptyHint": "创建订阅后，可在首页快速查看到期和流量状态。",
+    "create": "创建订阅",
+    "status": {
+      "active": "正常",
+      "expired": "已过期",
+      "overLimit": "已超流量"
+    }
+  },
+  "activity": {
+    "title": "最近活动",
+    "loading": "加载中...",
+    "filter": "筛选最近100条记录",
+    "noRecords": "暂无操作记录",
+    "clearTitle": "清空最近活动",
+    "confirmClear": "确认清空最近活动",
+    "confirmMessage": "此操作将删除所有最近活动记录，且不可撤销。确定要继续吗？",
+    "clearing": "清空中..."
+  },
+  "table": {
+    "time": "时间",
+    "action": "操作",
+    "instance": "隧道",
+    "status": "状态"
+  },
+  "actions": {
+    "start": "启动",
+    "stop": "停止",
+    "create": "创建",
+    "delete": "删除",
+    "restart": "重启"
+  },
+  "errors": {
+    "fetchStatsError": "获取tunnel统计数据失败",
+    "fetchLogsError": "获取操作日志失败",
+    "fetchTrafficError": "获取流量趋势数据失败",
+    "fetchWeeklyStatsError": "获取每周统计数据失败",
+    "clearLogsError": "无法清空日志"
+  },
+  "quickActions": {
+    "title": "快捷操作",
+    "addEndpoint": "添加节点",
+    "addEndpointDesc": "接入新的 Nowhere 节点",
+    "createTunnel": "创建隧道",
+    "createTunnelDesc": "快速新建 Nowhere 隧道",
+    "addSubscription": "添加订阅",
+    "addSubscriptionDesc": "发布已有隧道订阅",
+    "debugTools": "调试工具",
+    "docs": "说明文档",
+    "settings": "系统设置",
+    "settingsDesc": "账号、安全与外观",
+    "addEndpointSuccess": "添加成功",
+    "addEndpointSuccessDesc": "节点已成功添加",
+    "addEndpointFailed": "添加失败",
+    "addEndpointError": "添加节点失败",
+    "addEndpointErrorDesc": "添加节点时发生错误"
+  },
+  "update": {
+    "newVersionAvailable": "发现新版本",
+    "defaultMessage": "点击查看更新内容和下载链接",
+    "viewRelease": "查看"
+  },
+  "loading": "加载中..."
+}

@@ -1,0 +1,942 @@
+"use client";
+
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  useDisclosure,
+  cn,
+} from "@heroui/react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Icon } from "@iconify/react/dist/offline";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faRocket,
+  faPlay,
+  faStop,
+  faExclamationTriangle,
+  faUnlink,
+} from "@fortawesome/free-solid-svg-icons";
+import { faTrash, faRotateRight } from "@fortawesome/free-solid-svg-icons";
+import { useTranslation } from "react-i18next";
+
+import { fontSans } from "@/config/fonts";
+import { buildApiUrl } from "@/lib/utils";
+import { TrafficOverviewChart } from "@/components/ui/traffic-overview-chart";
+import { DemoQuickEntryCard } from "@/components/ui/demo-quick-entry-card";
+import { WeeklyStatsChart } from "@/components/ui/weekly-stats-chart";
+import { DailyStatsChart } from "@/components/ui/daily-stats-chart";
+import { SubscriptionStatusOverview } from "@/components/subscriptions/subscription-status-overview";
+
+// 统计数据类型
+interface TunnelStats {
+  total: number;
+  running: number;
+  stopped: number;
+  error: number;
+  offline: number;
+  total_endpoints: number;
+}
+
+// 操作日志类型
+interface OperationLog {
+  id: string;
+  time: string;
+  action: string;
+  instance: string;
+  status: {
+    type: "success" | "danger" | "warning";
+    text: string;
+    icon: string;
+  };
+  message?: string;
+}
+
+// 流量趋势数据类型
+interface TrafficTrendData {
+  hourTime: number; // Unix时间戳（秒）
+  hourDisplay: string;
+  tcpRx: number;
+  tcpTx: number;
+  udpRx: number;
+  udpTx: number;
+  recordCount: number;
+}
+
+// 常量定义 - 减少内存占用
+const MAX_TRAFFIC_DATA_POINTS = 50; // 从200减少到50，减少75%内存占用
+const MAX_OPERATION_LOGS = 20; // 从100减少到20，减少80%内存占用
+const TRAFFIC_REFRESH_INTERVAL_MS = 60_000;
+
+// 独立的时间显示组件：内部 setInterval 只让本组件重渲染，
+// 避免每秒触发整个 Dashboard 树重渲染导致的 HeroUI/recharts 内存抖动
+function CurrentTimeDisplay() {
+  const [time, setTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <>
+      {time.toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })}
+    </>
+  );
+}
+
+/**
+ * 仪表盘页面 - 使用服务端事件 SSE 架构
+ */
+export default function DashboardPage() {
+  const { t } = useTranslation("dashboard");
+  const { t: tCommon } = useTranslation("common");
+  const [tunnelStats, setTunnelStats] = useState<TunnelStats>({
+    total: 0,
+    running: 0,
+    stopped: 0,
+    error: 0,
+    offline: 0,
+    total_endpoints: 0,
+  });
+  const [operationLogs, setOperationLogs] = useState<OperationLog[]>([]);
+  const [trafficTrend, setTrafficTrend] = useState<TrafficTrendData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [trafficLoading, setTrafficLoading] = useState(true);
+  const [subscriptionCount, setSubscriptionCount] = useState<number | null>(
+    null,
+  );
+
+  // 今日流量数据状态
+  const [todayTrafficData, setTodayTrafficData] = useState<{
+    tcpIn: number;
+    tcpOut: number;
+    udpIn: number;
+    udpOut: number;
+    total: number;
+  }>({ tcpIn: 0, tcpOut: 0, udpIn: 0, udpOut: 0, total: 0 });
+
+  // 每周流量数据状态
+  const [weeklyStatsData, setWeeklyStatsData] = useState<
+    Array<{
+      weekday: string;
+      "TCP In": number;
+      "TCP Out": number;
+      "UDP In": number;
+      "UDP Out": number;
+    }>
+  >(() => {
+    // 初始化时生成默认的7天0值数据
+    const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    return weekdays.map((weekday) => ({
+      weekday,
+      "TCP In": 0,
+      "TCP Out": 0,
+      "UDP In": 0,
+      "UDP Out": 0,
+    }));
+  });
+
+  // 生成默认的7天0值数据
+  const generateDefaultWeeklyData = useCallback(() => {
+    const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    return weekdays.map((weekday) => ({
+      weekday,
+      "TCP In": 0,
+      "TCP Out": 0,
+      "UDP In": 0,
+      "UDP Out": 0,
+    }));
+  }, []);
+
+  // 清空日志确认模态框控制
+  const {
+    isOpen: isClearOpen,
+    onOpen: onClearOpen,
+    onClose: onClearClose,
+  } = useDisclosure();
+  const [clearingLogs, setClearingLogs] = useState(false);
+
+  // 版本更新检查已迁移至 navbar 的 <UpdateChip />,此处不再维护状态
+
+  // 添加组件挂载状态检查
+  const isMountedRef = useRef(true);
+
+  // 组件挂载/卸载管理
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      // 立即清理所有大数据集状态，释放内存
+      setTunnelStats({
+        total: 0,
+        running: 0,
+        stopped: 0,
+        error: 0,
+        offline: 0,
+        total_endpoints: 0,
+      });
+      setOperationLogs([]);
+      setTrafficTrend([]);
+      setSubscriptionCount(null);
+      setTodayTrafficData({
+        tcpIn: 0,
+        tcpOut: 0,
+        udpIn: 0,
+        udpOut: 0,
+        total: 0,
+      });
+      setWeeklyStatsData([]);
+
+      // 强制触发垃圾回收提示（开发环境）
+      if (process.env.NODE_ENV === "development") {
+        console.log("[Dashboard] 组件卸载，已清理所有数据状态");
+      }
+    };
+  }, []);
+
+  // 版本更新检查由 navbar 的 <UpdateChip /> 负责,此处不再重复
+
+  // 获取tunnel统计数据
+  const fetchTunnelStats = useCallback(async () => {
+    try {
+      const response = await fetch(buildApiUrl("/api/dashboard/tunnel-stats"));
+
+      if (!response.ok) throw new Error(t("errors.fetchStatsError"));
+      const result = await response.json();
+
+      if (result.success && result.data && isMountedRef.current) {
+        setTunnelStats(result.data);
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        console.error(t("errors.fetchStatsError"), error);
+      }
+    }
+  }, [t]);
+
+  // 获取操作日志数据
+  const fetchOperationLogs = useCallback(async () => {
+    try {
+      // 直接从API层面限制数据量，减少网络传输和内存占用
+      const response = await fetch(
+        buildApiUrl(`/api/dashboard/operate_logs?limit=${MAX_OPERATION_LOGS}`),
+      );
+
+      if (!response.ok) throw new Error(t("errors.fetchLogsError"));
+      const data: OperationLog[] = await response.json();
+
+      if (isMountedRef.current) {
+        // API已经限制了数量，但仍进行客户端保护
+        const limitedLogs =
+          data.length > MAX_OPERATION_LOGS
+            ? data.slice(-MAX_OPERATION_LOGS)
+            : data;
+
+        setOperationLogs(limitedLogs);
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        console.error(t("errors.fetchLogsError"), error);
+      }
+    }
+  }, [t]);
+
+  // 格式化字节数 - 纯函数，不需要useCallback
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  // 拉取今日流量增量 —— 后端从 traffic_hourly_summary 汇总 *_increment,
+  // 精准对应"本地零点起累计"，不再依赖前端做最早/最晚快照差值。
+  const fetchTodayTraffic = useCallback(async () => {
+    try {
+      const response = await fetch(buildApiUrl("/api/dashboard/today-traffic"));
+
+      if (!response.ok) throw new Error(t("errors.fetchTrafficError"));
+      const result = await response.json();
+
+      if (result.success && result.data && isMountedRef.current) {
+        setTodayTrafficData({
+          tcpIn: Math.max(0, Number(result.data.tcpIn) || 0),
+          tcpOut: Math.max(0, Number(result.data.tcpOut) || 0),
+          udpIn: Math.max(0, Number(result.data.udpIn) || 0),
+          udpOut: Math.max(0, Number(result.data.udpOut) || 0),
+          total: Math.max(0, Number(result.data.total) || 0),
+        });
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        console.error(t("errors.fetchTrafficError"), error);
+      }
+    }
+  }, [t]);
+
+  // 获取流量趋势数据
+  const fetchTrafficTrend = useCallback(async () => {
+    try {
+      const response = await fetch(buildApiUrl("/api/dashboard/traffic-trend"));
+
+      if (!response.ok) throw new Error(t("errors.fetchTrafficError"));
+
+      const result = await response.json();
+
+      if (result.success && isMountedRef.current) {
+        // 限制流量数据点数量，防止内存溢出 - 只保留最新的数据点
+        const limitedData =
+          result.data.length > MAX_TRAFFIC_DATA_POINTS
+            ? result.data.slice(-MAX_TRAFFIC_DATA_POINTS)
+            : result.data;
+
+        setTrafficTrend(limitedData);
+        console.log("[仪表盘前端] 流量趋势数据获取成功:", {
+          原始数据条数: result.data.length,
+          限制后数据条数: limitedData.length,
+          示例数据: limitedData.slice(0, 3),
+        });
+      } else if (isMountedRef.current) {
+        throw new Error(result.error || t("errors.fetchTrafficError"));
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        console.error(t("errors.fetchTrafficError"), error);
+        setTrafficTrend([]); // 设置为空数组，显示无数据状态
+      }
+    }
+  }, [t]);
+
+  // 获取每周统计数据
+  const fetchWeeklyStats = useCallback(async () => {
+    try {
+      const response = await fetch(buildApiUrl("/api/dashboard/weekly-stats"));
+
+      if (!response.ok) throw new Error(t("errors.fetchWeeklyStatsError"));
+
+      const result = await response.json();
+
+      if (result.success && isMountedRef.current) {
+        // 转换后端数据格式为图表组件需要的格式
+        let chartData = result.data.map((item: any) => ({
+          weekday: item.weekday,
+          "TCP In": Math.max(0, Number(item.tcp_in) || 0),
+          "TCP Out": Math.max(0, Number(item.tcp_out) || 0),
+          "UDP In": Math.max(0, Number(item.udp_in) || 0),
+          "UDP Out": Math.max(0, Number(item.udp_out) || 0),
+        }));
+
+        // 如果后端没有返回数据或数据不足7天，生成默认的7天0值数据
+        if (!chartData || chartData.length === 0) {
+          chartData = generateDefaultWeeklyData();
+        }
+
+        setWeeklyStatsData(chartData);
+        console.log("[仪表盘前端] 每周统计数据获取成功:", {
+          数据条数: chartData.length,
+          示例数据: chartData.slice(0, 3),
+        });
+      } else if (isMountedRef.current) {
+        throw new Error(result.error || t("errors.fetchWeeklyStatsError"));
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        console.error(t("errors.fetchWeeklyStatsError"), error);
+        // 出错时也设置默认的7天0值数据，而不是空数组
+        setWeeklyStatsData(generateDefaultWeeklyData());
+      }
+    }
+  }, [generateDefaultWeeklyData, t]);
+
+  // 确认清空日志
+  const confirmClearLogs = useCallback(async () => {
+    if (operationLogs.length === 0) return;
+    setClearingLogs(true);
+    try {
+      const response = await fetch(buildApiUrl("/api/dashboard/operate_logs"), {
+        method: "DELETE",
+      });
+      const data = await response.json();
+
+      if (response.ok && data.success && isMountedRef.current) {
+        setOperationLogs([]);
+        onClearClose();
+      } else if (isMountedRef.current) {
+        console.error(
+          t("errors.clearLogsError"),
+          data.error || t("errors.clearLogsError"),
+        );
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        console.error(t("errors.fetchLogsError"), error);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setClearingLogs(false);
+      }
+    }
+  }, [operationLogs.length, onClearClose, t]);
+
+  // 初始化数据 - 改为分批加载，减少同时加载的内存压力
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isMountedRef.current) return;
+
+      setLoading(true);
+      setTrafficLoading(true);
+
+      try {
+        // 第一批：加载基础统计数据（优先级最高）
+        console.log("[仪表盘] 加载第一批数据：基础统计");
+        await fetchTunnelStats();
+
+        if (!isMountedRef.current) return;
+
+        // 第二批：加载流量相关数据
+        console.log("[仪表盘] 加载第二批数据：流量统计");
+        await fetchTrafficTrend();
+        await fetchTodayTraffic();
+        await fetchWeeklyStats();
+
+        if (!isMountedRef.current) return;
+
+        // 第三批：加载操作日志（优先级最低）
+        console.log("[仪表盘] 加载第三批数据：操作日志");
+        await fetchOperationLogs();
+
+        console.log("[仪表盘] 所有数据加载完成");
+      } catch (error) {
+        if (isMountedRef.current) {
+          console.error("加载数据失败:", error);
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setLoading(false);
+          setTrafficLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+  }, [
+    fetchTunnelStats,
+    fetchOperationLogs,
+    fetchTrafficTrend,
+    fetchTodayTraffic,
+    fetchWeeklyStats,
+  ]);
+
+  // Keep the three traffic panels in sync with the hourly backend summary.
+  // This refresh is silent so charts do not return to their loading state.
+  useEffect(() => {
+    let refreshing = false;
+
+    const refreshTraffic = async () => {
+      if (refreshing || !isMountedRef.current) return;
+      refreshing = true;
+      try {
+        await Promise.all([
+          fetchTrafficTrend(),
+          fetchTodayTraffic(),
+          fetchWeeklyStats(),
+        ]);
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    const timer = window.setInterval(
+      refreshTraffic,
+      TRAFFIC_REFRESH_INTERVAL_MS,
+    );
+
+    return () => window.clearInterval(timer);
+  }, [fetchTrafficTrend, fetchTodayTraffic, fetchWeeklyStats]);
+
+  // 表格列定义
+  const columns = [
+    { key: "time", label: t("table.time") },
+    { key: "action", label: t("table.action") },
+    { key: "instance", label: t("table.instance") },
+    { key: "status", label: t("table.status") },
+  ];
+
+  // 根据操作类型获取图标和样式 - 纯函数，不需要useCallback
+  const getActionIconAndColor = (action: string) => {
+    const actionLower = action.toLowerCase();
+
+    if (actionLower.includes("start") || actionLower.includes("启动")) {
+      return {
+        icon: faPlay,
+        color: "success" as const,
+        bgColor: "bg-success/10",
+        textColor: "text-success",
+      };
+    } else if (actionLower.includes("stop") || actionLower.includes("停止")) {
+      return {
+        icon: faStop,
+        color: "danger" as const,
+        bgColor: "bg-danger/10",
+        textColor: "text-danger",
+      };
+    } else if (actionLower.includes("create") || actionLower.includes("创建")) {
+      return {
+        icon: faRocket,
+        color: "primary" as const,
+        bgColor: "bg-primary/10",
+        textColor: "text-primary",
+      };
+    } else if (actionLower.includes("delete") || actionLower.includes("删除")) {
+      return {
+        icon: faTrash,
+        color: "danger" as const,
+        bgColor: "bg-danger/10",
+        textColor: "text-danger",
+      };
+    } else if (
+      actionLower.includes("restart") ||
+      actionLower.includes("重启")
+    ) {
+      return {
+        icon: faRotateRight,
+        color: "warning" as const,
+        bgColor: "bg-warning/10",
+        textColor: "text-warning",
+      };
+    } else {
+      // 默认图标
+      return {
+        icon: faExclamationTriangle,
+        color: "default" as const,
+        bgColor: "bg-default/10",
+        textColor: "text-default-600",
+      };
+    }
+  };
+
+  return (
+    <div
+      className={cn("space-y-4 md:space-y-6 p-4 md:p-0", fontSans.className)}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
+          <p className="text-sm md:text-base text-default-500">
+            {t("currentTime")} <CurrentTimeDisplay />
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 sm:gap-6">
+          <div className="text-center">
+            <div className="text-xl md:text-2xl font-bold text-primary">
+              {loading ? "--" : tunnelStats.total}
+            </div>
+            <div className="text-xs md:text-sm text-default-500">
+              {t("stats.instances")}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl md:text-2xl font-bold text-secondary">
+              {loading ? "--" : tunnelStats.total_endpoints}
+            </div>
+            <div className="text-xs md:text-sm text-default-500">
+              {t("stats.endpoints")}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold text-success md:text-2xl">
+              {subscriptionCount ?? "--"}
+            </div>
+            <div className="whitespace-nowrap text-xs text-default-500 md:text-sm">
+              {t("stats.subscriptions")}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card
+          isPressable
+          className="p-3 md:p-4 bg-gradient-to-br from-success-50 to-success-100/50 dark:from-success-900/20 dark:to-success-900/10 cursor-pointer transition-transform hover:scale-[1.02]"
+          classNames={{
+            base: "bg-content1 outline-none transition-transform-background motion-reduce:transition-none",
+          }}
+        >
+          <CardBody className="p-0">
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-1">
+                <span className="text-default-600 text-xs md:text-sm">
+                  {t("stats.running")}
+                </span>
+                <span className="text-xl md:text-2xl font-semibold text-success">
+                  {loading ? "--" : tunnelStats.running}
+                </span>
+              </div>
+              <div className="flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-lg bg-success/10 text-success">
+                <FontAwesomeIcon
+                  className="!w-6 !h-6"
+                  icon={faPlay}
+                  style={{ width: "24px", height: "24px" }}
+                />
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card
+          isPressable
+          className="p-3 md:p-4 bg-gradient-to-br from-danger-50 to-danger-100/50 dark:from-danger-900/20 dark:to-danger-900/10 cursor-pointer transition-transform hover:scale-[1.02]"
+          classNames={{
+            base: "bg-content1 outline-none transition-transform-background motion-reduce:transition-none",
+          }}
+        >
+          <CardBody className="p-0">
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-1">
+                <span className="text-default-600 text-xs md:text-sm">
+                  {t("stats.stopped")}
+                </span>
+                <span className="text-xl md:text-2xl font-semibold text-danger">
+                  {loading ? "--" : tunnelStats.stopped}
+                </span>
+              </div>
+              <div className="flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-lg bg-danger/10 text-danger">
+                <FontAwesomeIcon
+                  className="!w-6 !h-6"
+                  icon={faStop}
+                  style={{ width: "24px", height: "24px" }}
+                />
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card
+          isPressable
+          className="p-3 md:p-4 bg-gradient-to-br from-warning-50 to-warning-100/50 dark:from-warning-900/20 dark:to-warning-900/10 cursor-pointer transition-transform hover:scale-[1.02]"
+          classNames={{
+            base: "bg-content1 outline-none transition-transform-background motion-reduce:transition-none",
+          }}
+        >
+          <CardBody className="p-0">
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-1">
+                <span className="text-default-600 text-xs md:text-sm">
+                  {t("stats.error")}
+                </span>
+                <span className="text-xl md:text-2xl font-semibold text-warning">
+                  {loading ? "--" : tunnelStats.error}
+                </span>
+              </div>
+              <div className="flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-lg bg-warning/10 text-warning">
+                <FontAwesomeIcon
+                  className="!w-6 !h-6"
+                  icon={faExclamationTriangle}
+                  style={{ width: "24px", height: "24px" }}
+                />
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card
+          isPressable
+          className="p-3 md:p-4 bg-gradient-to-br from-default-50 to-default-100/50 dark:from-default-900/20 dark:to-default-900/10 cursor-pointer transition-transform hover:scale-[1.02]"
+          classNames={{
+            base: "bg-content1 outline-none transition-transform-background motion-reduce:transition-none",
+          }}
+        >
+          <CardBody className="p-0">
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-1">
+                <span className="text-default-600 text-xs md:text-sm">
+                  {t("stats.offline")}
+                </span>
+                <span className="text-xl md:text-2xl font-semibold text-default-600">
+                  {loading ? "--" : tunnelStats.offline}
+                </span>
+              </div>
+              <div className="flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-lg bg-default/10 text-default-600">
+                <FontAwesomeIcon
+                  className="!w-6 !h-6"
+                  icon={faUnlink}
+                  style={{ width: "24px", height: "24px" }}
+                />
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* 流量概览和订阅状态 - 响应式布局 */}
+      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 md:gap-6">
+        {/* 流量概览 - 在移动端占满宽度，桌面端占2列 */}
+        <div className="lg:col-span-2 lg:h-full">
+          <TrafficOverviewChart
+            data={trafficTrend.map((item) => ({
+              time: new Date(item.hourTime * 1000).toISOString(), // 将时间戳转换为ISO字符串
+              tcpIn: item.tcpRx,
+              tcpOut: item.tcpTx,
+              udpIn: item.udpRx,
+              udpOut: item.udpTx,
+            }))}
+            loading={trafficLoading}
+            timeRange="24Hours"
+            onTimeRangeChange={(range) => {
+              console.log("时间范围变化:", range);
+              // 这里可以根据时间范围重新获取数据
+            }}
+          />
+        </div>
+
+        {/* 订阅状态 - 右侧卡片 */}
+        <div className="lg:h-full">
+          <SubscriptionStatusOverview onCountChange={setSubscriptionCount} />
+        </div>
+      </div>
+
+      {/* 快捷操作和其他卡片 - 三列布局 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        {/* 本周统计 - 中间占三分之一 */}
+        <div className="w-full">
+          <WeeklyStatsChart
+            categories={["TCP In", "TCP Out", "UDP In", "UDP Out"]}
+            chartData={weeklyStatsData}
+            color="primary"
+            formatBytes={formatBytes}
+            loading={trafficLoading}
+            loadingText={t("loading")}
+            title={t("traffic.weeklyStats")}
+          />
+        </div>
+
+        {/* 今日统计 - 右侧占三分之一 */}
+        <div className="w-full">
+          <DailyStatsChart
+            categories={["TCP In", "TCP Out", "UDP In", "UDP Out"]}
+            chartData={[
+              {
+                name: "TCP In",
+                value: todayTrafficData.tcpIn,
+                valueText: formatBytes(todayTrafficData.tcpIn),
+              },
+              {
+                name: "TCP Out",
+                value: todayTrafficData.tcpOut,
+                valueText: formatBytes(todayTrafficData.tcpOut),
+              },
+              {
+                name: "UDP In",
+                value: todayTrafficData.udpIn,
+                valueText: formatBytes(todayTrafficData.udpIn),
+              },
+              {
+                name: "UDP Out",
+                value: todayTrafficData.udpOut,
+                valueText: formatBytes(todayTrafficData.udpOut),
+              },
+            ]}
+            color="success"
+            formatBytes={formatBytes}
+            loading={trafficLoading}
+            loadingText={t("loading")}
+            title={t("traffic.todayTraffic")}
+            total={todayTrafficData.total}
+            unitTitle="Total"
+          />
+        </div>
+
+        {/* 快捷操作按钮 - 左侧占三分之一 */}
+        <div className="w-full">
+          <DemoQuickEntryCard />
+        </div>
+      </div>
+
+      {/* 最近活动 */}
+      <Card isHoverable className="min-h-[400px]">
+        <CardHeader className="p-5">
+          <div className="flex flex-col items-start gap-1 w-full">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex flex-col items-start gap-0">
+                <span className="text-base font-semibold text-foreground">
+                  {t("activity.title")}
+                </span>
+                <span className="text-sm text-default-500">
+                  {loading ? t("activity.loading") : t("activity.filter")}
+                </span>
+              </div>
+              <Button
+                isIconOnly
+                className="text-default-400 hover:text-danger"
+                size="sm"
+                title={t("activity.clearTitle")}
+                variant="light"
+                onPress={onClearOpen}
+              >
+                <Icon
+                  className="w-4 h-4"
+                  icon="solar:trash-bin-minimalistic-bold"
+                />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardBody className="p-4 pt-0">
+          <div className="">
+            <div className="h-[400px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <Table
+                isHeaderSticky
+                removeWrapper
+                classNames={{
+                  base: "overflow-visible",
+                  table: operationLogs.length === 0 ? "min-h-[200px]" : "",
+                  thead: "text-white border-none",
+                  tbody: "",
+                  tr: "",
+                  td: "text-xs md:text-sm border-none",
+                }}
+                selectionMode="none"
+              >
+                <TableHeader columns={columns}>
+                  {(column) => (
+                    <TableColumn
+                      key={column.key}
+                      align="start"
+                      className="bg-primary text-white border-none"
+                      hideHeader={false}
+                    >
+                      {column.label}
+                    </TableColumn>
+                  )}
+                </TableHeader>
+                <TableBody
+                  emptyContent={
+                    <div className="text-center py-8">
+                      <span className="text-default-400 text-xs md:text-sm">
+                        {loading
+                          ? t("activity.loading")
+                          : t("activity.noRecords")}
+                      </span>
+                    </div>
+                  }
+                  items={operationLogs}
+                >
+                  {(log) => (
+                    <TableRow>
+                      {(columnKey) => (
+                        <TableCell>
+                          {columnKey === "time" && (
+                            <div className="text-xs md:text-sm">
+                              {new Date(log.time).toLocaleString("zh-CN", {
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                          )}
+                          {columnKey === "action" && (
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`flex items-center justify-center w-6 h-6 rounded-md ${getActionIconAndColor(log.action).bgColor}`}
+                              >
+                                <FontAwesomeIcon
+                                  className={`!w-3 !h-3 ${getActionIconAndColor(log.action).textColor}`}
+                                  icon={getActionIconAndColor(log.action).icon}
+                                  style={{ width: "12px", height: "12px" }}
+                                />
+                              </div>
+                              <span className="truncate text-xs md:text-sm">
+                                {log.action}
+                              </span>
+                            </div>
+                          )}
+                          {columnKey === "instance" && (
+                            <div className="truncate text-xs md:text-sm">
+                              {log.instance}
+                            </div>
+                          )}
+                          {columnKey === "status" && (
+                            <Chip
+                              classNames={{
+                                base: "text-xs max-w-full",
+                                content: "truncate",
+                              }}
+                              color={log.status.type}
+                              size="sm"
+                              startContent={
+                                <Icon
+                                  className="md:w-3.5 md:h-3.5"
+                                  icon={log.status.icon}
+                                  width={12}
+                                />
+                              }
+                              variant="flat"
+                            >
+                              {log.status.text}
+                            </Chip>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* 清空操作日志确认模态框 */}
+      <Modal isOpen={isClearOpen} onClose={onClearClose}>
+        <ModalContent>
+          <ModalHeader className="flex flex-col gap-1">
+            {t("activity.confirmClear")}
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-sm">{t("activity.confirmMessage")}</p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="light" onPress={onClearClose}>
+              {tCommon("action.cancel")}
+            </Button>
+            <Button
+              color="danger"
+              isLoading={clearingLogs}
+              onPress={confirmClearLogs}
+            >
+              {clearingLogs
+                ? t("activity.clearing")
+                : tCommon("action.confirm")}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </div>
+  );
+}

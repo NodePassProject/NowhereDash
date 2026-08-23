@@ -1,0 +1,147 @@
+{
+  "toast": {
+    "unknownError": "未知错误",
+    "instanceActions": {
+      "starting": "正在启动隧道...",
+      "stopping": "正在停止隧道...",
+      "restarting": "正在重启隧道...",
+      "deleting": "正在删除隧道...",
+      "pleaseWait": "请稍候",
+      "startInstance": "启动 {{name}}",
+      "stopInstance": "停止 {{name}}",
+      "restartInstance": "重启 {{name}}",
+      "deleteInstance": "删除 {{name}}",
+      "instanceStarted": "隧道已启动",
+      "instanceStopped": "隧道已停止",
+      "instanceRestarted": "隧道重启完成",
+      "instanceDeleted": "隧道已删除",
+      "startedSuccessfully": "{{name}} 已成功启动",
+      "stoppedSuccessfully": "{{name}} 已成功停止",
+      "restartedSuccessfully": "{{name}} 已成功重启并运行",
+      "deletedSuccessfully": "{{name}} 已成功删除",
+      "instanceStartedSuccessfully": "隧道已成功启动",
+      "instanceStoppedSuccessfully": "隧道已成功停止",
+      "instanceRestartedSuccessfully": "隧道已成功重启并运行",
+      "instanceDeletedSuccessfully": "隧道已成功删除",
+      "failedToStart": "启动失败",
+      "failedToStop": "停止失败",
+      "restartFailed": "重启失败",
+      "deleteFailed": "删除失败",
+      "failedToStartInstance": "{{name}} 启动失败",
+      "failedToStopInstance": "{{name}} 停止失败",
+      "failedToRestartInstance": "{{name}} 重启失败",
+      "failedToDeleteInstance": "{{name}} 删除失败"
+    }
+  },
+  "details": {
+    "chartStates": {
+      "loading": "加载中...",
+      "loadFailed": "加载失败",
+      "noData": "暂无数据"
+    },
+    "chartTooltips": {
+      "tcpInbound": "TCP入站",
+      "tcpOutbound": "TCP出站",
+      "udpInbound": "UDP入站",
+      "udpOutbound": "UDP出站",
+      "upload": "上传",
+      "download": "下载",
+      "pool": "池",
+      "latency": "延迟",
+      "tcp": "TCP",
+      "udp": "UDP",
+      "traffic": "流量用量"
+    },
+    "logs": {
+      "title": "隧道日志",
+      "logTitle": "日志",
+      "realtime": "实时日志",
+      "realtimeShort": "实时",
+      "realtimeOutput": "实时输出",
+      "selectDate": "选择日期",
+      "export": "导出日志",
+      "exportFile": "导出日志文件",
+      "clear": "清空",
+      "cleared": "文件日志已清空",
+      "timeError": "时间解析错误",
+      "refresh": "刷新",
+      "scrollToBottom": "滚动到底部",
+      "confirmClear": "确认清空日志",
+      "clearRealtimeWarning": "此操作将清空当前实时输出的内容。",
+      "clearFileWarning": "此操作将清空页面显示和所有已保存的日志文件，且不可撤销。",
+      "confirmClearButton": "确认清空",
+      "cancel": "取消",
+      "loading": "加载文件日志中...",
+      "waitingForLogs": "正在等待日志推送...",
+      "noLogs": "暂无日志记录",
+      "fetchFailed": "获取日志失败",
+      "clearSuccess": "清空成功",
+      "clearSuccessDesc": "日志已清空",
+      "clearFailed": "清空失败",
+      "clearFailedDesc": "清空日志失败"
+    },
+    "timeRange": {
+      "1h": "1小时",
+      "6h": "6小时",
+      "12h": "12小时",
+      "24h": "24小时"
+    },
+    "wsMonitor": {
+      "connected": "隧道监控WebSocket连接成功",
+      "connectedDesc": "开始接收实时隧道性能数据",
+      "tcpTraffic": "TCP流量",
+      "udpTraffic": "UDP流量",
+      "send": "发送",
+      "receive": "接收",
+      "latency": "延迟",
+      "pool": "连接池",
+      "connections": "连接数",
+      "tcp": "TCP",
+      "udp": "UDP"
+    }
+  },
+  "instanceTagModal": {
+    "title": "设置标签",
+    "tabs": {
+      "json": "JSON 编辑",
+      "template": "模板编辑",
+      "ariaLabel": "编辑模式"
+    },
+    "fields": {
+      "startDate": "开始日期",
+      "endDate": "结束日期",
+      "unlimited": "无限期",
+      "amount": "金额",
+      "amountPlaceholder": "输入金额",
+      "bandwidth": "带宽",
+      "bandwidthPlaceholder": "输入带宽数值",
+      "traffic": "流量",
+      "trafficPlaceholder": "输入流量数值",
+      "networkRoute": "网络路由",
+      "networkRoutePlaceholder": "例如：4837、9929、联通 等",
+      "extra": "额外信息",
+      "extraPlaceholder": "使用逗号分隔多个信息"
+    },
+    "amountType": {
+      "none": "无格式",
+      "prefix": "前缀",
+      "suffix": "后缀",
+      "free": "免费"
+    },
+    "ariaLabels": {
+      "currencySymbol": "货币符号",
+      "currencyCode": "货币代码"
+    },
+    "buttons": {
+      "cancel": "取消",
+      "save": "保存"
+    },
+    "toast": {
+      "saveFailed": "保存失败",
+      "saveFailedMessage": "保存标签失败",
+      "saveSuccess": "保存成功",
+      "saveSuccessDesc": "隧道标签已更新",
+      "unknownError": "未知错误"
+    }
+  }
+}
