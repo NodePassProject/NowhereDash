@@ -161,7 +161,7 @@ Nowhere / NowhereDash 统一安装脚本
 
 通用选项:
   --yes, --non-interactive     使用默认值，不显示配置向导
-  --purge                      卸载时同时删除配置、状态和数据
+  --purge                      卸载 Dash 时同时删除配置、状态和数据
   --no-firewall                不自动添加防火墙规则
   --github-proxy URL           GitHub 下载代理前缀，例如 https://ghfast.top
 
@@ -1866,17 +1866,13 @@ uninstall_node() {
     rm -f "$OPENCTRL_BINARY" "$OPENCTRL_BINARY.new" "$OPENCTRL_BINARY.previous" \
         "$NOWHERE_BINARY" "$NOWHERE_BINARY.new" "$NOWHERE_BINARY.previous"
     remove_firewall_port "$port"
-    if [[ "$PURGE" -eq 1 ]]; then
-        safe_remove_tree "$NODE_INSTALL_DIR"
-        safe_remove_tree "$NODE_CONFIG_DIR"
-        safe_remove_tree "$NOWHERE_CERT_DIR"
-        if [[ "$remove_user" -eq 1 ]] && id "$NODE_USER" >/dev/null 2>&1; then
-            userdel "$NODE_USER" >/dev/null 2>&1 || true
-        fi
-        log_success "OpenCtrl、Nowhere、节点状态和配置已删除。"
-    else
-        log_success "节点程序已卸载；OpenCtrl 状态和配置已保留。"
+    safe_remove_tree "$NODE_INSTALL_DIR"
+    safe_remove_tree "$NODE_CONFIG_DIR"
+    safe_remove_tree "$NOWHERE_CERT_DIR"
+    if [[ "$remove_user" -eq 1 ]] && id "$NODE_USER" >/dev/null 2>&1; then
+        userdel "$NODE_USER" >/dev/null 2>&1 || true
     fi
+    log_success "OpenCtrl、Nowhere、节点状态、API Key、配置和证书已删除。"
 }
 
 show_status() {

@@ -188,15 +188,20 @@ sudo /tmp/nowheredash-install.sh status all
 
 ## 卸载
 
-默认卸载程序和服务，但保留 Dash 数据、OpenCtrl 状态、API Key 与配置：
+卸载 Nowhere 节点时会同时彻底删除 OpenCtrl、节点状态、API Key、配置和安装器生成的证书：
 
 ```bash
 sudo /tmp/nowheredash-install.sh uninstall nowhere --yes
+```
+
+卸载 Dash 时默认保留 Dash 数据：
+
+```bash
 sudo /tmp/nowheredash-install.sh uninstall dash --yes
 sudo /tmp/nowheredash-install.sh uninstall all --yes
 ```
 
-只有显式添加 `--purge` 才删除保留的数据：
+显式添加 `--purge` 可同时删除 Dash 数据：
 
 ```bash
 sudo /tmp/nowheredash-install.sh uninstall all --purge --yes

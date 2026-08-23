@@ -188,15 +188,20 @@ Updates preserve configuration and data. If the new service fails its startup or
 
 ## Uninstall
 
-The default removes programs and services while retaining Dash data, OpenCtrl state, the API key, and configuration:
+Uninstalling a Nowhere node completely removes OpenCtrl, node state, the API key, configuration, and installer-generated certificates:
 
 ```bash
 sudo /tmp/nowheredash-install.sh uninstall nowhere --yes
+```
+
+Uninstalling Dash preserves its data by default:
+
+```bash
 sudo /tmp/nowheredash-install.sh uninstall dash --yes
 sudo /tmp/nowheredash-install.sh uninstall all --yes
 ```
 
-Add `--purge` only when the retained data should also be deleted:
+Add `--purge` to remove Dash data as well:
 
 ```bash
 sudo /tmp/nowheredash-install.sh uninstall all --purge --yes
