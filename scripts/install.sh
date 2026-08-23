@@ -1641,11 +1641,18 @@ node_probe_host() {
 
 probe_node() {
     local key="$1"
-    local scheme host url
+    local scheme host url i
     scheme=$(node_scheme)
     host=$(node_probe_host)
     url="$scheme://$host:$NODE_PORT/$NODE_PREFIX/v2/info"
-    curl --noproxy '*' -kfsS --max-time 5 -H "X-API-Key: $key" "$url" >/dev/null
+    for ((i = 0; i < 20; i++)); do
+        if curl --noproxy '*' -kfsS --max-time 3 \
+            -H "X-API-Key: $key" "$url" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
 }
 
 write_node_endpoint() {
