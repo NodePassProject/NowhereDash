@@ -1025,6 +1025,7 @@ load_dash_config() {
     if [[ "$DASH_HTTPS_SET" -eq 0 && -z "$https_value" && -n "$DASH_CERT_PATH" && -n "$DASH_KEY_PATH" ]]; then
         DASH_ENABLE_HTTPS="true"
     fi
+    return 0
 }
 
 configure_dash_interactive() {
@@ -1355,6 +1356,7 @@ load_node_config() {
         value=$(config_get "$NODE_INSTALL_CONFIG" GITHUB_PROXY)
         [[ -n "$value" ]] && GITHUB_PROXY="$value"
     fi
+    return 0
 }
 
 configure_node_interactive() {
