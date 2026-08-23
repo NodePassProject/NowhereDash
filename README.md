@@ -30,6 +30,14 @@ This project is Portal-only. It does not include legacy client/server instance m
 
 ## Quick Start
 
+Run with Docker:
+
+```bash
+mkdir -p db logs && docker run -d --name nowheredash --restart unless-stopped -p 4000:4000 -v "$(pwd)/db:/app/db" -v "$(pwd)/logs:/app/logs" ghcr.io/nodepassproject/nowheredash:latest
+```
+
+Then open `http://localhost:4000`.
+
 - **Docker:** [docs/en/DOCKER.md](docs/en/DOCKER.md)
 - **Binary + systemd:** [docs/en/BINARY.md](docs/en/BINARY.md)
 - **Development:** [docs/en/DEVELOPMENT.md](docs/en/DEVELOPMENT.md)

@@ -30,6 +30,14 @@ NowhereDash 是一个通过 [OpenCtrl](https://github.com/NodePassProject/OpenCt
 
 ## 快速开始
 
+使用 Docker 运行：
+
+```bash
+mkdir -p db logs && docker run -d --name nowheredash --restart unless-stopped -p 4000:4000 -v "$(pwd)/db:/app/db" -v "$(pwd)/logs:/app/logs" ghcr.io/nodepassproject/nowheredash:latest
+```
+
+然后打开 `http://localhost:4000`。
+
 - **Docker：** [DOCKER.md](DOCKER.md)
 - **二进制 + systemd：** [BINARY.md](BINARY.md)
 - **开发环境：** [DEVELOPMENT.md](DEVELOPMENT.md)
