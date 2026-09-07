@@ -320,6 +320,14 @@
       "restoreInstances": "恢复隧道",
       "uninstall": "卸载节点",
       "delete": "删除节点",
+      "compact": {
+        "syncInstances": "同步隧道",
+        "networkDebug": "网络调试",
+        "copyConfig": "复制配置",
+        "editConfig": "修改配置",
+        "backupInstances": "备份隧道",
+        "restoreInstances": "恢复隧道"
+      },
       "sections": {
         "instances": "Instances",
         "connection": "Connection",

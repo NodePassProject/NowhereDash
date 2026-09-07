@@ -14,8 +14,8 @@
   </p>
 
   <p>
+    <a href="#product-tour">Product Tour</a> ·
     <a href="#quick-start">Quick Start</a> ·
-    <a href="#portal-subscriptions">Subscriptions</a> ·
     <a href="#documentation">Documentation</a> ·
     <a href="#development">Development</a>
   </p>
@@ -30,19 +30,21 @@ NowhereDash ships as a single Go binary with an embedded React frontend. It uses
 
 ## At a Glance
 
-| Area                      | What NowhereDash provides                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **Portal lifecycle**      | Create, edit, start, stop, restart, rename, sort, and monitor `portal://` instances.                                                  |
-| **OpenCtrl endpoints**    | Manage multiple OpenCtrl `/api/v2` endpoints from one dashboard.                                                                      |
-| **Complete editor**       | Configure network mode, TLS, certificates, ALPN, rate limits, dialing, SOCKS, next hop, carriers, pools, SNI, pinning, and log level. |
-| **Live operations**       | Stream status, traffic, connections, latency, and logs through SSE and WebSocket.                                                     |
-| **Operations data**       | Inspect runtime metrics, clean historical data, and compact SQLite during maintenance windows.                                        |
-| **Managed subscriptions** | Publish selected running Portals through token-authenticated feeds with expiry, traffic limits, previews, and token rotation.         |
-| **Security controls**     | Use the guided setup, password reset, OAuth2-only login, TLS, and subscription token rotation.                                        |
-| **Portable deployment**   | Run with Docker, systemd, or a standalone binary; initialize SQLite or PostgreSQL from the browser.                                   |
-| **Mobile workflows**      | Generate QR codes, `nowhere://` URLs, and `anywhere://add-proxy` import links.                                                        |
+| Area              | Highlights                                                             |
+| ----------------- | ---------------------------------------------------------------------- |
+| **Portals**       | Manage Portal instances across multiple OpenCtrl endpoints.            |
+| **Observability** | Monitor traffic, connections, latency, status, and logs in real time.  |
+| **Subscriptions** | Publish protected feeds with QR codes and mobile import links.         |
+| **Security**      | Guided setup, OAuth2 login, TLS, and token rotation.                   |
+| **Deployment**    | Run with Docker, systemd, or a standalone binary on SQLite/PostgreSQL. |
 
-OpenCtrl metadata remains intact: `meta.tags` and `meta.peer` are stored independently from the Portal URL.
+## Product Tour
+
+|                                                                  |                                                       |                                                           |
+| ---------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| ![Initialization wizard](docs/screenshots/00-initialtion.png)    | ![Login page](docs/screenshots/01-login.png)          | ![Dashboard overview](docs/screenshots/02-dashboard.gif)  |
+| ![Subscription management](docs/screenshots/03-subscription.gif) | ![Portal management](docs/screenshots/04-portal.gif)  | ![Portal details](docs/screenshots/05-portal-details.gif) |
+| ![Node management](docs/screenshots/06-node.gif)                 | ![Node details](docs/screenshots/07-node-details.gif) | ![Settings](docs/screenshots/08-settings.gif)             |
 
 ## Quick Start
 
@@ -70,15 +72,6 @@ Open [http://localhost:4000](http://localhost:4000).
 | Docker           | [Docker guide](docs/en/DOCKER.md)           | Containers and quick evaluation |
 | Binary + systemd | [Binary guide](docs/en/BINARY.md)           | Long-running Linux hosts        |
 | Source           | [Development guide](docs/en/DEVELOPMENT.md) | Contributors and custom builds  |
-
-## Portal Subscriptions
-
-The Subscription menu publishes selected Portals through `/sub/portal?token=...`. Every request is rendered from the current running Portal state and returns one or more `nowhere://` URLs.
-
-Subscriptions support expiry, traffic limits, carrier preferences, traffic reset, content preview, token rotation, light/dark icons, and one-click Anywhere import through `anywhere://add-proxy`.
-
-> [!WARNING]
-> A subscription URL is a bearer secret. Use HTTPS in production and redact its `token` query parameter from reverse-proxy, CDN, and observability logs.
 
 ## Configuration
 

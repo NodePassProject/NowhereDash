@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="../logo.png" alt="NowhereDash" width="720">
+  <img src="../logo.png" alt="NowhereDash" width="320">
 
   <h1>NowhereDash</h1>
 
@@ -14,8 +14,8 @@
   </p>
 
   <p>
+    <a href="#产品展示">产品展示</a> ·
     <a href="#快速开始">快速开始</a> ·
-    <a href="#portal-订阅">Portal 订阅</a> ·
     <a href="#文档">文档</a> ·
     <a href="#开发构建">开发构建</a>
   </p>
@@ -30,19 +30,21 @@ NowhereDash 以单个 Go 二进制发布，并内嵌 React 前端。后端采用
 
 ## 能力概览
 
-| 领域                | NowhereDash 提供的能力                                                                              |
-| ------------------- | --------------------------------------------------------------------------------------------------- |
-| **Portal 生命周期** | 创建、编辑、启动、停止、重启、重命名、排序和监控 `portal://` 实例。                                 |
-| **OpenCtrl 端点**   | 在一个面板中管理多个 OpenCtrl `/api/v2` 端点。                                                      |
-| **完整编辑器**      | 配置网络模式、TLS、证书、ALPN、速率限制、拨号、SOCKS、Next Hop、载波、连接池、SNI、Pin 和日志级别。 |
-| **实时运维**        | 通过 SSE 和 WebSocket 展示状态、流量、连接数、延迟和日志。                                          |
-| **运维数据**        | 查看运行指标、清理历史数据，并在维护窗口执行 SQLite 停服压缩。                                      |
-| **托管订阅**        | 将运行中的 Portal 发布为 Token 鉴权订阅，支持到期时间、流量限制、预览和 Token 轮换。                |
-| **安全控制**        | 使用初始化向导、密码重置、OAuth2-only 登录、TLS 和订阅 Token 轮换。                                 |
-| **灵活部署**        | 使用 Docker、systemd 或单二进制运行，并可在浏览器中初始化 SQLite 或 PostgreSQL。                    |
-| **移动端工作流**    | 生成二维码、`nowhere://` URL 和 `anywhere://add-proxy` 导入链接。                                   |
+| 领域         | 核心能力                                                      |
+| ------------ | ------------------------------------------------------------- |
+| **Portal**   | 在多个 OpenCtrl 端点之间统一管理 Portal 实例。                |
+| **可观测性** | 实时监控流量、连接数、延迟、运行状态和日志。                  |
+| **订阅**     | 发布受保护的订阅，并提供二维码和移动端导入链接。              |
+| **安全**     | 提供初始化向导、OAuth2 登录、TLS 和 Token 轮换。              |
+| **部署**     | 使用 Docker、systemd 或单二进制运行，支持 SQLite/PostgreSQL。 |
 
-OpenCtrl Metadata 会被完整保留：`meta.tags` 和 `meta.peer` 独立于 Portal URL 存储。
+## 产品展示
+
+|                                                  |                                                 |                                                      |
+| ------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------- |
+| ![初始化向导](../screenshots/00-initialtion.png) | ![登录页面](../screenshots/01-login.png)        | ![仪表盘概览](../screenshots/02-dashboard.gif)       |
+| ![订阅管理](../screenshots/03-subscription.gif)  | ![Portal 管理](../screenshots/04-portal.gif)    | ![Portal 详情](../screenshots/05-portal-details.gif) |
+| ![节点管理](../screenshots/06-node.gif)          | ![节点详情](../screenshots/07-node-details.gif) | ![设置](../screenshots/08-settings.gif)              |
 
 ## 快速开始
 
@@ -70,15 +72,6 @@ docker run -d \
 | Docker           | [Docker 部署](DOCKER.md)   | 容器环境与快速体验    |
 | 二进制 + systemd | [二进制部署](BINARY.md)    | 长期运行的 Linux 主机 |
 | 源码             | [开发环境](DEVELOPMENT.md) | 参与开发与自定义构建  |
-
-## Portal 订阅
-
-订阅菜单可将选定的 Portal 发布为 `/sub/portal?token=...`。每次请求都会根据当前运行中的 Portal 状态实时生成内容，并返回一条或多条 `nowhere://` URL。
-
-订阅支持到期时间、流量上限、传输偏好、流量重置、正文预览、Token 轮换、明暗主题图标，以及通过 `anywhere://add-proxy` 一键导入 Anywhere。
-
-> [!WARNING]
-> 订阅 URL 属于 Bearer Secret。生产环境应使用 HTTPS，并在反向代理、CDN 和可观测性日志中隐藏 `token` 查询参数。
 
 ## 配置
 

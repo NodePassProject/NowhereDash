@@ -6,10 +6,10 @@
   "nav": {
     "dashboard": "Dashboard",
     "tunnels": "Tunnels",
-    "tunnelsManage": "Tunnel Management",
-    "subscriptionsManage": "Subscription Management",
+    "tunnelsManage": "Tunnel",
+    "subscriptionsManage": "Subscription",
     "endpoints": "Nodes",
-    "endpointsManage": "Node Management",
+    "endpointsManage": "Node",
     "settings": "Settings",
     "appearanceSettings": "Appearance",
     "logout": "Logout"

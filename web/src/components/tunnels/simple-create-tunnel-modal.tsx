@@ -10,7 +10,6 @@ import {
   Select,
   SelectItem,
   Spinner,
-  Switch,
   Tab,
   Tabs,
   Tooltip,
@@ -93,12 +92,12 @@ const INITIAL_FORM: PortalForm = {
   etar: "",
   dial: "",
   socks: "",
-  next: "none",
+  next: "",
   up: "udp",
   down: "udp",
   mux: "0",
   sni: "",
-  pin: "none",
+  pin: "",
   logLevel: "info",
   restart: true,
   enableLogStore: true,
@@ -146,10 +145,45 @@ const randomListenPort = () => {
 
 interface FormFieldProps {
   children: ReactNode;
-  label: string;
+  label: ReactNode;
   className?: string;
   hint?: string;
   required?: boolean;
+}
+
+interface LabelWithHelpProps {
+  label: string;
+  help: string;
+}
+
+function LabelWithHelp({ label, help }: LabelWithHelpProps) {
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <Tooltip
+        closeDelay={0}
+        content={help}
+        delay={0}
+        isOpen={isHelpOpen}
+        placement="top"
+      >
+        <span
+          aria-label={help}
+          className="inline-flex cursor-help text-default-400"
+          role="img"
+          tabIndex={0}
+          onBlur={() => setIsHelpOpen(false)}
+          onFocus={() => setIsHelpOpen(true)}
+          onPointerEnter={() => setIsHelpOpen(true)}
+          onPointerLeave={() => setIsHelpOpen(false)}
+        >
+          <Icon icon="lucide:circle-help" width={13} />
+        </span>
+      </Tooltip>
+    </span>
+  );
 }
 
 function FormField({
@@ -222,7 +256,7 @@ export default function SimpleCreateTunnelModal({
             socks: "SOCKS 出口",
             socksHint: "与下级隧道互斥",
             next: "下级隧道",
-            nextHint: "格式：shared-key@host:port；与 SOCKS 出口互斥",
+            nextHint: "格式:shared-key@host:port; 与 SOCKS出口互斥",
             up: "上行载体",
             down: "下行载体",
             mux: "TLS Mux",
@@ -365,12 +399,18 @@ export default function SimpleCreateTunnelModal({
             etar: String(tunnel.etar ?? 0),
             dial: tunnel.dial ?? "auto",
             socks: tunnel.socks ?? "none",
-            next: tunnel.next ?? "none",
+            next:
+              tunnel.next && tunnel.next.toLowerCase() !== "none"
+                ? tunnel.next
+                : "",
             up: tunnel.up ?? "udp",
             down: tunnel.down ?? "udp",
             mux: String(tunnel.mux ?? "0"),
             sni: tunnel.sni ?? "none",
-            pin: tunnel.pin ?? "none",
+            pin:
+              tunnel.pin && tunnel.pin.toLowerCase() !== "none"
+                ? tunnel.pin
+                : "",
             logLevel: tunnel.logLevel ?? "info",
             restart: tunnel.restart ?? true,
             enableLogStore:
@@ -424,9 +464,17 @@ export default function SimpleCreateTunnelModal({
     if (![rate, etar].every(Number.isInteger) || rate < 0 || etar < 0)
       throw new Error(copy.invalid);
     if (form.mux !== "0" && form.mux !== "1") throw new Error(copy.invalid);
-    if (form.socks !== "none" && form.next !== "none")
-      throw new Error(copy.invalid);
-    if (form.pin !== "none" && !/^[a-f0-9]{64}$/.test(form.pin))
+    const socksConfigured =
+      form.socks.trim() !== "" && form.socks.trim().toLowerCase() !== "none";
+    const nextConfigured =
+      form.next.trim() !== "" && form.next.trim().toLowerCase() !== "none";
+
+    if (socksConfigured && nextConfigured) throw new Error(copy.invalid);
+    if (
+      form.pin.trim() !== "" &&
+      form.pin.trim().toLowerCase() !== "none" &&
+      !/^[a-f0-9]{64}$/.test(form.pin.trim())
+    )
       throw new Error(copy.invalid);
   };
 
@@ -494,6 +542,8 @@ export default function SimpleCreateTunnelModal({
     }
   };
 
+  const nextEnabled =
+    form.next.trim() !== "" && form.next.trim().toLowerCase() !== "none";
   const udpOnlyNext = form.up === "udp" && form.down === "udp";
 
   return (
@@ -573,8 +623,12 @@ export default function SimpleCreateTunnelModal({
                     </FormField>
 
                     <FormField
-                      hint={copy.listenHostHint}
-                      label={copy.listenHost}
+                      label={
+                        <LabelWithHelp
+                          help={copy.listenHostHint}
+                          label={copy.listenHost}
+                        />
+                      }
                     >
                       <Input
                         aria-label={copy.listenHost}
@@ -832,6 +886,7 @@ export default function SimpleCreateTunnelModal({
                         <section className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                           <Input
                             aria-label={copy.socks}
+                            className="sm:col-span-2"
                             label={copy.socks}
                             placeholder="none"
                             value={form.socks}
@@ -842,16 +897,21 @@ export default function SimpleCreateTunnelModal({
                                 next:
                                   value.trim() &&
                                   value.trim().toLowerCase() !== "none"
-                                    ? "none"
+                                    ? ""
                                     : current.next,
                               }))
                             }
                           />
                           <Input
                             aria-label={copy.next}
-                            description={copy.nextHint}
-                            label={copy.next}
-                            placeholder="none"
+                            classNames={{ label: "!pointer-events-auto" }}
+                            label={
+                              <LabelWithHelp
+                                help={copy.nextHint}
+                                label={copy.next}
+                              />
+                            }
+                            placeholder="node"
                             value={form.next}
                             onValueChange={(value) =>
                               setForm((current) => ({
@@ -860,84 +920,97 @@ export default function SimpleCreateTunnelModal({
                                 socks:
                                   value.trim() &&
                                   value.trim().toLowerCase() !== "none"
-                                    ? "none"
+                                    ? ""
                                     : current.socks,
                               }))
                             }
                           />
-                          <FormField
-                            hint={udpOnlyNext ? copy.muxDisabled : copy.muxHint}
-                            label={copy.mux}
-                          >
-                            <div className="flex h-10 items-center justify-between rounded-medium bg-default-100 px-3">
-                              <span className="text-sm text-default-600">
-                                {form.mux === "1"
-                                  ? copy.enabled
-                                  : copy.disabled}
-                              </span>
-                              <Switch
-                                aria-label={copy.mux}
-                                color="primary"
-                                isDisabled={udpOnlyNext}
-                                isSelected={form.mux === "1"}
-                                size="sm"
-                                onValueChange={(selected) =>
-                                  update("mux", selected ? "1" : "0")
-                                }
-                              />
-                            </div>
-                          </FormField>
                         </section>
 
-                        <section className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <FormField label={copy.up}>
-                            <Select
-                              aria-label={copy.up}
-                              selectedKeys={new Set([form.up])}
-                              onSelectionChange={(keys) =>
-                                updateCarrier(
-                                  "up",
-                                  String(Array.from(keys)[0] ?? "udp"),
-                                )
-                              }
-                            >
-                              <SelectItem key="mix">mix</SelectItem>
-                              <SelectItem key="tcp">tcp</SelectItem>
-                              <SelectItem key="udp">udp</SelectItem>
-                            </Select>
-                          </FormField>
-                          <FormField label={copy.down}>
-                            <Select
-                              aria-label={copy.down}
-                              selectedKeys={new Set([form.down])}
-                              onSelectionChange={(keys) =>
-                                updateCarrier(
-                                  "down",
-                                  String(Array.from(keys)[0] ?? "udp"),
-                                )
-                              }
-                            >
-                              <SelectItem key="mix">mix</SelectItem>
-                              <SelectItem key="tcp">tcp</SelectItem>
-                              <SelectItem key="udp">udp</SelectItem>
-                            </Select>
-                          </FormField>
-                          <Input
-                            aria-label={copy.sni}
-                            label={copy.sni}
-                            placeholder="none"
-                            value={form.sni}
-                            onValueChange={(value) => update("sni", value)}
-                          />
-                          <Input
-                            aria-label={copy.pin}
-                            className="sm:col-span-2"
-                            label={copy.pin}
-                            placeholder="none"
-                            value={form.pin}
-                            onValueChange={(value) => update("pin", value)}
-                          />
-                        </section>
+                        {nextEnabled && (
+                          <>
+                            <section className="mt-2 grid grid-cols-1 items-start gap-2 sm:grid-cols-3">
+                              <Select
+                                aria-label={copy.mux}
+                                classNames={{ label: "!pointer-events-auto" }}
+                                disabledKeys={
+                                  udpOnlyNext ? new Set(["1"]) : new Set()
+                                }
+                                label={
+                                  <LabelWithHelp
+                                    help={
+                                      udpOnlyNext
+                                        ? copy.muxDisabled
+                                        : copy.muxHint
+                                    }
+                                    label={copy.mux}
+                                  />
+                                }
+                                labelPlacement="inside"
+                                selectedKeys={new Set([form.mux])}
+                                onSelectionChange={(keys) =>
+                                  update(
+                                    "mux",
+                                    String(Array.from(keys)[0] ?? "0"),
+                                  )
+                                }
+                              >
+                                <SelectItem key="0">{copy.disabled}</SelectItem>
+                                <SelectItem key="1">{copy.enabled}</SelectItem>
+                              </Select>
+                              <Select
+                                aria-label={copy.up}
+                                label={copy.up}
+                                labelPlacement="inside"
+                                selectedKeys={new Set([form.up])}
+                                onSelectionChange={(keys) =>
+                                  updateCarrier(
+                                    "up",
+                                    String(Array.from(keys)[0] ?? "udp"),
+                                  )
+                                }
+                              >
+                                <SelectItem key="mix">mix</SelectItem>
+                                <SelectItem key="tcp">tcp</SelectItem>
+                                <SelectItem key="udp">udp</SelectItem>
+                              </Select>
+                              <Select
+                                aria-label={copy.down}
+                                label={copy.down}
+                                labelPlacement="inside"
+                                selectedKeys={new Set([form.down])}
+                                onSelectionChange={(keys) =>
+                                  updateCarrier(
+                                    "down",
+                                    String(Array.from(keys)[0] ?? "udp"),
+                                  )
+                                }
+                              >
+                                <SelectItem key="mix">mix</SelectItem>
+                                <SelectItem key="tcp">tcp</SelectItem>
+                                <SelectItem key="udp">udp</SelectItem>
+                              </Select>
+                            </section>
+
+                            <section className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                              <Input
+                                aria-label={copy.sni}
+                                label={copy.sni}
+                                placeholder="none"
+                                value={form.sni}
+                                onValueChange={(value) => update("sni", value)}
+                              />
+                              <Input
+                                aria-label={copy.pin}
+                                className="sm:col-span-2"
+                                label={copy.pin}
+                                placeholder="none"
+                                value={form.pin}
+                                onValueChange={(value) => update("pin", value)}
+                              />
+                            </section>
+                          </>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>

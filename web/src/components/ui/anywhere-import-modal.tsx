@@ -3,7 +3,6 @@ import {
   Modal,
   ModalBody,
   ModalContent,
-  ModalFooter,
   ModalHeader,
   Spinner,
   Tab,
@@ -120,23 +119,20 @@ export default function AnywhereImportModal({
         isOpen={isOpen}
         placement="center"
         scrollBehavior="inside"
-        size="2xl"
+        size="xl"
         onOpenChange={onOpenChange}
       >
         <ModalContent>
-          {(onClose) => (
+          {() => (
             <>
-              <ModalHeader className="flex items-start gap-3 border-b border-default-100 pb-4">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary dark:bg-primary-900/25">
-                  <Icon icon="lucide:radio-tower" width={20} />
-                </span>
+              <ModalHeader className="border-b border-default-100 px-5 py-3.5 pr-12">
                 <div className="flex min-w-0 items-center gap-2">
                   <p className="text-lg font-semibold">{title}</p>
                   {headerAction}
                 </div>
               </ModalHeader>
 
-              <ModalBody className="gap-4 px-5 py-5 sm:px-6">
+              <ModalBody className="gap-3 px-5 py-4">
                 {!normalizedImportUrl ? (
                   <div className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-xl border border-warning-200 bg-warning-50 px-5 text-center text-sm text-warning-700 dark:border-warning-800/60 dark:bg-warning-900/20 dark:text-warning-300">
                     <Icon icon="lucide:circle-alert" width={24} />
@@ -146,16 +142,17 @@ export default function AnywhereImportModal({
                   <Tabs
                     aria-label={t("import.methods.label")}
                     classNames={{
-                      base: "w-full",
+                      base: "flex w-full justify-center",
                       tabList:
-                        "w-full justify-center gap-5 rounded-none border-b border-default-200 p-0",
-                      tab: "h-14 min-w-52 px-3",
+                        "w-auto rounded-lg bg-default-100/80 p-1 dark:bg-default-100/40",
+                      tab: "h-11 min-w-60 px-3",
                       tabContent: "group-data-[selected=true]:text-primary",
-                      panel: "px-0 pt-4",
+                      cursor: "rounded-md bg-content1 shadow-small",
+                      panel: "w-full px-0 pt-3",
                     }}
                     color="primary"
                     defaultSelectedKey="anywhere"
-                    variant="underlined"
+                    variant="solid"
                   >
                     <Tab
                       key="anywhere"
@@ -163,7 +160,7 @@ export default function AnywhereImportModal({
                         <span className="flex items-center gap-2.5 text-left">
                           <img
                             alt="Anywhere"
-                            className="size-8 shrink-0 rounded-lg object-cover shadow-small"
+                            className="size-7 shrink-0 rounded-lg object-cover shadow-small"
                             src="/anywhere-app-icon.png"
                           />
                           <span className="flex min-w-0 flex-col items-start leading-tight">
@@ -177,9 +174,9 @@ export default function AnywhereImportModal({
                         </span>
                       }
                     >
-                      <div className="space-y-4">
-                        <div className="min-w-0 space-y-4">
-                          <div className="mx-auto flex size-[min(76vw,320px)] items-center justify-center overflow-hidden rounded-xl border border-default-200 bg-white p-3 shadow-small">
+                      <div className="space-y-3">
+                        <div className="min-w-0 space-y-3">
+                          <div className="mx-auto flex size-[min(72vw,248px)] items-center justify-center overflow-hidden rounded-lg border border-default-200 bg-white p-2.5 shadow-small">
                             {qrError ? (
                               <p className="px-4 text-center text-sm text-danger">
                                 {t("import.qrError")}
@@ -195,9 +192,9 @@ export default function AnywhereImportModal({
                             )}
                           </div>
 
-                          <div className="space-y-3">
+                          <div className="space-y-2.5">
                             <p className="text-sm font-semibold">{qrLead}</p>
-                            <div className="flex items-start gap-2 rounded-lg bg-default-100/80 px-3.5 py-3 text-xs leading-5 text-default-600 dark:bg-default-100/30">
+                            <div className="flex items-start gap-2 rounded-lg bg-default-100/80 px-3 py-2.5 text-xs leading-5 text-default-600 dark:bg-default-100/30">
                               <Icon
                                 className="mt-0.5 shrink-0 text-primary"
                                 icon="lucide:circle-alert"
@@ -205,15 +202,15 @@ export default function AnywhereImportModal({
                               />
                               <span>{qrHint}</span>
                             </div>
-                            <ol className="grid gap-2 text-sm text-default-700">
-                              <li className="flex items-center gap-3">
-                                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-50 text-xs font-semibold text-primary dark:bg-primary-900/25">
+                            <ol className="grid gap-1.5 text-sm text-default-700">
+                              <li className="flex items-center gap-2.5">
+                                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[11px] font-semibold text-primary dark:bg-primary-900/25">
                                   1
                                 </span>
                                 <span>{t("import.qrStepOne")}</span>
                               </li>
-                              <li className="flex items-center gap-3">
-                                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-50 text-xs font-semibold text-primary dark:bg-primary-900/25">
+                              <li className="flex items-center gap-2.5">
+                                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[11px] font-semibold text-primary dark:bg-primary-900/25">
                                   2
                                 </span>
                                 <span>{t("import.qrStepTwo")}</span>
@@ -221,10 +218,11 @@ export default function AnywhereImportModal({
                             </ol>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <Button
                               color="primary"
                               isDisabled={!anywhereUrl}
+                              size="sm"
                               startContent={
                                 <Icon icon="lucide:download" width={16} />
                               }
@@ -235,6 +233,7 @@ export default function AnywhereImportModal({
                             <Button
                               color="primary"
                               isDisabled={!normalizedImportUrl}
+                              size="sm"
                               startContent={
                                 <Icon
                                   icon={copied ? "lucide:check" : "lucide:copy"}
@@ -252,12 +251,6 @@ export default function AnywhereImportModal({
                   </Tabs>
                 )}
               </ModalBody>
-
-              <ModalFooter className="border-t border-default-100 pt-3">
-                <Button variant="light" onPress={onClose}>
-                  {t("actions.close")}
-                </Button>
-              </ModalFooter>
             </>
           )}
         </ModalContent>

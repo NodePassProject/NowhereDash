@@ -15,7 +15,6 @@ import {
   ModalHeader,
   ModalFooter,
   Textarea,
-  Input,
   Tab,
   Tabs,
   useDisclosure,
@@ -38,7 +37,6 @@ import {
   faFileLines,
   faHardDrive,
   faClock,
-  faPlus,
   faSync,
   faCopy,
   faPlug,
@@ -171,11 +169,6 @@ export default function EndpointDetailPage() {
 
   // 模态框状态管理
   const {
-    isOpen: isAddTunnelOpen,
-    onOpen: onAddTunnelOpen,
-    onOpenChange: onAddTunnelOpenChange,
-  } = useDisclosure();
-  const {
     isOpen: isEditConfigOpen,
     onOpen: onEditConfigOpen,
     onOpenChange: onEditConfigOpenChange,
@@ -210,8 +203,6 @@ export default function EndpointDetailPage() {
   const [clearLogsLoading, setClearLogsLoading] = useState(false);
 
   // 表单状态
-  const [tunnelUrl, setTunnelUrl] = useState("");
-  const [tunnelName, setTunnelName] = useState("");
   const [configForm, setConfigForm] = useState<EndpointConfigForm>({
     name: "", // 主控名称，留空表示不修改
     url: "", // 完整URL（包含API路径），留空表示不修改
@@ -767,69 +758,6 @@ export default function EndpointDetailPage() {
       });
     } finally {
       setClearLogsLoading(false);
-    }
-  };
-
-  // 添加实例
-  const handleAddTunnel = () => {
-    setTunnelUrl("");
-    setTunnelName("");
-    onAddTunnelOpen();
-  };
-
-  const handleSubmitAddTunnel = async () => {
-    if (!endpointId) return;
-    const portalUrl = tunnelUrl.trim();
-
-    if (!portalUrl) {
-      addToast({
-        title: t("details.toasts.addInstanceUrlRequired"),
-        description: t("details.toasts.addInstanceUrlRequiredDesc"),
-        color: "warning",
-      });
-
-      return;
-    }
-    if (!portalUrl.startsWith("portal://")) {
-      addToast({
-        title: t("details.toasts.portalUrlRequired"),
-        description: t("details.toasts.portalUrlRequiredDesc"),
-        color: "warning",
-      });
-
-      return;
-    }
-    try {
-      const res = await fetch(buildApiUrl("/api/tunnels/create_by_url"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          endpointId: Number(endpointId),
-          url: portalUrl,
-          name: tunnelName.trim(),
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || t("details.toasts.addInstanceFailed"));
-      }
-      addToast({
-        title: t("details.toasts.addInstanceSuccess"),
-        description: data.message || t("details.toasts.addInstanceSuccessDesc"),
-        color: "success",
-      });
-      onAddTunnelOpenChange();
-      await fetchInstances();
-    } catch (err) {
-      addToast({
-        title: t("details.toasts.addInstanceFailed"),
-        description:
-          err instanceof Error
-            ? err.message
-            : t("details.toasts.addInstanceFailedDesc"),
-        color: "danger",
-      });
     }
   };
 
@@ -1517,20 +1445,12 @@ export default function EndpointDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {/* 实例 */}
                 <Button
-                  color="primary"
-                  startContent={<FontAwesomeIcon icon={faPlus} />}
-                  variant="flat"
-                  onPress={handleAddTunnel}
-                >
-                  {t("details.actions.addInstance")}
-                </Button>
-                <Button
                   color="secondary"
                   startContent={<FontAwesomeIcon icon={faSync} />}
                   variant="flat"
                   onPress={handleRefreshTunnels}
                 >
-                  {t("details.actions.syncInstances")}
+                  {t("details.actions.compact.syncInstances")}
                 </Button>
 
                 <Divider
@@ -1565,7 +1485,7 @@ export default function EndpointDetailPage() {
                   variant="flat"
                   onPress={onNetworkDebugOpen}
                 >
-                  {t("details.actions.networkDebug")}
+                  {t("details.actions.compact.networkDebug")}
                 </Button>
 
                 <Divider
@@ -1580,7 +1500,7 @@ export default function EndpointDetailPage() {
                   variant="flat"
                   onPress={handleEditConfig}
                 >
-                  {t("details.actions.editConfig")}
+                  {t("details.actions.compact.editConfig")}
                 </Button>
                 <Button
                   color="default"
@@ -1588,7 +1508,7 @@ export default function EndpointDetailPage() {
                   variant="flat"
                   onPress={handleCopyConfig}
                 >
-                  {t("details.actions.copyConfig")}
+                  {t("details.actions.compact.copyConfig")}
                 </Button>
                 <Button
                   color="success"
@@ -1619,7 +1539,7 @@ export default function EndpointDetailPage() {
                   variant="flat"
                   onPress={handleOpenBackup}
                 >
-                  {t("details.actions.backupInstances")}
+                  {t("details.actions.compact.backupInstances")}
                 </Button>
                 <Button
                   color="secondary"
@@ -1627,7 +1547,7 @@ export default function EndpointDetailPage() {
                   variant="flat"
                   onPress={handleOpenRestore}
                 >
-                  {t("details.actions.restoreInstances")}
+                  {t("details.actions.compact.restoreInstances")}
                 </Button>
               </div>
 
@@ -2001,51 +1921,6 @@ export default function EndpointDetailPage() {
                 </Button>
                 <Button onPress={() => setExtractOpen(false)}>
                   {t("details.modals.extractInstances.close")}
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
-
-      {/* 添加实例模态框 */}
-      <Modal
-        isOpen={isAddTunnelOpen}
-        placement="center"
-        onOpenChange={onAddTunnelOpenChange}
-      >
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader>{t("details.modals.addInstance.title")}</ModalHeader>
-              <ModalBody>
-                <div className="space-y-3">
-                  <Input
-                    label={t("details.modals.addInstance.nameLabel")}
-                    placeholder={t(
-                      "details.modals.addInstance.namePlaceholder",
-                    )}
-                    value={tunnelName}
-                    onValueChange={setTunnelName}
-                  />
-                  <Input
-                    isRequired
-                    label={t("details.modals.addInstance.urlLabel")}
-                    placeholder={t("details.modals.addInstance.urlPlaceholder")}
-                    value={tunnelUrl}
-                    onValueChange={setTunnelUrl}
-                  />
-                  <p className="text-tiny text-default-500">
-                    {t("details.modals.addInstance.formatHint")}
-                  </p>
-                </div>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="light" onPress={onClose}>
-                  {t("details.modals.addInstance.cancel")}
-                </Button>
-                <Button color="primary" onPress={handleSubmitAddTunnel}>
-                  {t("details.modals.addInstance.add")}
                 </Button>
               </ModalFooter>
             </>

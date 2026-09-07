@@ -1,5 +1,5 @@
 {
-  "title": "Subscription Management",
+  "title": "Subscription",
   "total": "Showing {{shown}} of {{total}} subscriptions",
   "search": {
     "placeholder": "Search subscription name",

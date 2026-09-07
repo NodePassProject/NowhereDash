@@ -285,7 +285,7 @@ export default function TunnelsPage() {
             error: "有错误",
           }
         : {
-            title: "Tunnel Management",
+            title: "Tunnel",
             create: "Create Tunnel",
             createOptions: "Tunnel creation options",
             createFromUrl: "Create from Tunnel URL",
@@ -979,7 +979,7 @@ export default function TunnelsPage() {
         </div>
       </header>
 
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center">
         <div className="grid flex-1 gap-2 sm:grid-cols-[minmax(220px,1fr)_150px_180px] xl:max-w-[620px]">
           <Input
             isClearable
@@ -1032,7 +1032,65 @@ export default function TunnelsPage() {
           </Select>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {selectedCount > 0 && (
+          <div className="flex items-center gap-2">
+            <Divider className="hidden h-5 xl:block" orientation="vertical" />
+            <Dropdown placement="bottom-end">
+              <DropdownTrigger>
+                <Button size="sm" variant="flat">
+                  {copy.selected} {selectedCount}
+                  <Icon icon="lucide:chevron-down" width={14} />
+                </Button>
+              </DropdownTrigger>
+              <DropdownMenu
+                aria-label={copy.bulkActions}
+                onAction={(key) => {
+                  if (key === "export") setExportOpen(true);
+                  else if (key === "delete") setBatchDeleteOpen(true);
+                  else void runBatchAction(key as PortalAction);
+                }}
+              >
+                <DropdownItem
+                  key="start"
+                  className="text-success"
+                  startContent={<Icon icon="lucide:play" width={16} />}
+                >
+                  {copy.bulkStart}
+                </DropdownItem>
+                <DropdownItem
+                  key="stop"
+                  className="text-warning"
+                  startContent={<Icon icon="lucide:square" width={16} />}
+                >
+                  {copy.bulkStop}
+                </DropdownItem>
+                <DropdownItem
+                  key="restart"
+                  className="text-secondary"
+                  startContent={<Icon icon="lucide:rotate-cw" width={16} />}
+                >
+                  {copy.bulkRestart}
+                </DropdownItem>
+                <DropdownItem
+                  key="export"
+                  startContent={<Icon icon="lucide:download" width={16} />}
+                >
+                  {copy.bulkExport}
+                </DropdownItem>
+                <DropdownItem
+                  key="delete"
+                  className="text-danger"
+                  color="danger"
+                  startContent={<Icon icon="lucide:trash-2" width={16} />}
+                >
+                  {copy.bulkDelete}
+                </DropdownItem>
+              </DropdownMenu>
+            </Dropdown>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
           <Dropdown placement="bottom-end">
             <DropdownTrigger>
               <Button
@@ -1115,63 +1173,6 @@ export default function TunnelsPage() {
           >
             <span className="hidden sm:inline">{copy.refresh}</span>
           </Button>
-          {selectedCount > 0 && (
-            <>
-              <Divider className="hidden h-5 xl:block" orientation="vertical" />
-              <Dropdown placement="bottom-end">
-                <DropdownTrigger>
-                  <Button size="sm" variant="flat">
-                    {copy.selected} {selectedCount}
-                    <Icon icon="lucide:chevron-down" width={14} />
-                  </Button>
-                </DropdownTrigger>
-                <DropdownMenu
-                  aria-label={copy.bulkActions}
-                  onAction={(key) => {
-                    if (key === "export") setExportOpen(true);
-                    else if (key === "delete") setBatchDeleteOpen(true);
-                    else void runBatchAction(key as PortalAction);
-                  }}
-                >
-                  <DropdownItem
-                    key="start"
-                    className="text-success"
-                    startContent={<Icon icon="lucide:play" width={16} />}
-                  >
-                    {copy.bulkStart}
-                  </DropdownItem>
-                  <DropdownItem
-                    key="stop"
-                    className="text-warning"
-                    startContent={<Icon icon="lucide:square" width={16} />}
-                  >
-                    {copy.bulkStop}
-                  </DropdownItem>
-                  <DropdownItem
-                    key="restart"
-                    className="text-secondary"
-                    startContent={<Icon icon="lucide:rotate-cw" width={16} />}
-                  >
-                    {copy.bulkRestart}
-                  </DropdownItem>
-                  <DropdownItem
-                    key="export"
-                    startContent={<Icon icon="lucide:download" width={16} />}
-                  >
-                    {copy.bulkExport}
-                  </DropdownItem>
-                  <DropdownItem
-                    key="delete"
-                    className="text-danger"
-                    color="danger"
-                    startContent={<Icon icon="lucide:trash-2" width={16} />}
-                  >
-                    {copy.bulkDelete}
-                  </DropdownItem>
-                </DropdownMenu>
-              </Dropdown>
-            </>
-          )}
           <Select
             aria-label={copy.rows}
             className="w-28"

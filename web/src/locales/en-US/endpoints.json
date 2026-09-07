@@ -1,6 +1,6 @@
 {
   "page": {
-    "title": "Node Management",
+    "title": "Node",
     "loading": "Loading node list...",
     "noEndpoints": "No Nodes",
     "noEndpointsDesc": "Click 'Add Node' to add a node",
@@ -320,6 +320,14 @@
       "restoreInstances": "Restore Tunnels",
       "uninstall": "Uninstall Node",
       "delete": "Delete Node",
+      "compact": {
+        "syncInstances": "Sync",
+        "networkDebug": "Debug",
+        "copyConfig": "Copy",
+        "editConfig": "Edit",
+        "backupInstances": "Back Up",
+        "restoreInstances": "Restore"
+      },
       "sections": {
         "instances": "Tunnels",
         "connection": "Connection",

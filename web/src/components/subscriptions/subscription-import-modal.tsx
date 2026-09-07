@@ -135,9 +135,9 @@ export default function SubscriptionImportModal({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
         <div className="min-w-0 space-y-1">
-          <p className="px-1 text-sm text-foreground-600">
+          <p className="whitespace-nowrap px-1 text-sm text-foreground-600">
             {t("fields.upCarrier")}
           </p>
           <Select
@@ -158,7 +158,7 @@ export default function SubscriptionImportModal({
           </Select>
         </div>
         <div className="min-w-0 space-y-1">
-          <p className="px-1 text-sm text-foreground-600">
+          <p className="whitespace-nowrap px-1 text-sm text-foreground-600">
             {t("fields.downCarrier")}
           </p>
           <Select
@@ -203,7 +203,7 @@ export default function SubscriptionImportModal({
           aria-label={t("import.outputPreferences")}
           className="size-8 min-w-8"
           size="sm"
-          variant="light"
+          variant="flat"
         >
           <Tooltip content={t("import.outputPreferences")} placement="top">
             <span className="inline-flex items-center justify-center">
@@ -212,7 +212,7 @@ export default function SubscriptionImportModal({
           </Tooltip>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] max-w-[calc(100vw-2rem)] p-0">
+      <PopoverContent className="w-[340px] max-w-[calc(100vw-2rem)] p-0">
         {outputPreferences}
       </PopoverContent>
     </Popover>
