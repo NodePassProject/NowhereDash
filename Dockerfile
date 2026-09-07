@@ -2,7 +2,7 @@
 # Next.js应用内置SSE服务，单端口运行
 
 # ========= 前端构建阶段 =========
-FROM node:20-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 
 # 使用 Node 20 兼容的 pnpm 版本，避免 latest 拉到要求 Node 22+ 的版本
 RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
@@ -25,8 +25,10 @@ RUN cd web && \
     pnpm prune --prod
 
 # ========= Go 构建阶段 =========
-FROM golang:1.23-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS backend-builder
 ARG VERSION=dev
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /app
 
 # 仅需 git 拉取私有依赖；改用 modernc.org/sqlite (纯 Go) 后不再需要 gcc/musl-dev/sqlite-dev
@@ -57,7 +59,8 @@ COPY --from=frontend-builder /app/cmd/server/dist ./cmd/server/dist
 ENV CGO_ENABLED=0
 
 # 编译 Backend 可执行文件，注入版本号
-RUN go build -ldflags "-s -w -X main.Version=${VERSION}" -o nowheredash ./cmd/server
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags "-s -w -X main.Version=${VERSION}" -o nowheredash ./cmd/server
 
 # ========= 运行阶段 =========
 FROM alpine:latest
