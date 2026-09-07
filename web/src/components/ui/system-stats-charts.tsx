@@ -457,7 +457,9 @@ const MemoryChart = ({
                     "bg-foreground": color === "default",
                   })}
                 />
-                <span className="text-default-600 text-xs">{t("details.systemMonitor.memory")}</span>
+                <span className="text-default-600 text-xs">
+                  {t("details.systemMonitor.memory")}
+                </span>
                 <MiniCircularProgress
                   color={cn({
                     "hsl(var(--heroui-success))": color === "success",
@@ -507,7 +509,9 @@ const MemoryChart = ({
                     "bg-foreground": color === "default",
                   })}
                 />
-                <span className="text-default-600 text-xs">{t("details.systemMonitor.swap")}</span>
+                <span className="text-default-600 text-xs">
+                  {t("details.systemMonitor.swap")}
+                </span>
                 <MiniCircularProgress
                   className="opacity-70"
                   color={cn({
@@ -656,13 +660,11 @@ const MemoryChart = ({
 interface SystemStatsChartsProps {
   endpointId?: number | null;
   endpointOS?: string | null; // 主控操作系统
-  endpointVersion?: string | null; // 主控版本
 }
 
 export default function SystemStatsCharts({
   endpointId,
   endpointOS,
-  endpointVersion,
 }: SystemStatsChartsProps) {
   const { t } = useTranslation("endpoints");
   const [dataHistory, setDataHistory] = useState<SystemMonitorData[]>([]);
@@ -678,46 +680,14 @@ export default function SystemStatsCharts({
   const [diskRRate, setDiskRRate] = useState(0);
   const [diskWRate, setDiskWRate] = useState(0);
 
-  // 版本比较函数
-  const isVersionGreaterOrEqual = (
-    version: string,
-    targetVersion: string,
-  ): boolean => {
-    if (!version) return false;
-
-    const parseVersion = (v: string) => {
-      // 移除可能的前缀（如 'v'）并分割
-      const cleanVersion = v.replace(/^v/, "");
-
-      return cleanVersion.split(".").map((num) => parseInt(num, 10) || 0);
-    };
-
-    const current = parseVersion(version);
-    const target = parseVersion(targetVersion);
-
-    for (let i = 0; i < Math.max(current.length, target.length); i++) {
-      const currentPart = current[i] || 0;
-      const targetPart = target[i] || 0;
-
-      if (currentPart > targetPart) return true;
-      if (currentPart < targetPart) return false;
-    }
-
-    return true; // 版本相等
-  };
-
-  // 检查是否满足启动条件：实验模式 + 有端点ID + 操作系统是Linux + 版本>=1.6.0
-  const shouldConnect =
-    endpointId &&
-    endpointOS?.toLowerCase() === "linux" &&
-    endpointVersion &&
-    isVersionGreaterOrEqual(endpointVersion, "1.6.0");
+  // Linux 节点只要详情已加载就尝试连接监控 WebSocket。
+  const shouldConnect = endpointId && endpointOS?.toLowerCase() === "linux";
 
   // 使用系统监控WebSocket - 只有满足条件时才连接，并且要等待数据加载完成
   const wsEndpointId = useMemo(() => {
     // 只有当endpointDetail数据加载完成且满足条件时才返回endpointId
-    return shouldConnect && endpointOS && endpointVersion ? endpointId : null;
-  }, [shouldConnect, endpointId, endpointOS, endpointVersion]);
+    return shouldConnect && endpointOS ? endpointId : null;
+  }, [shouldConnect, endpointId, endpointOS]);
 
   const { latestData, isConnected } = useSystemMonitorWS(wsEndpointId, {
     onConnected: () => {
@@ -1041,7 +1011,6 @@ export default function SystemStatsCharts({
     console.log("[SystemStatsCharts] 组件状态:", {
       endpointId,
       endpointOS,
-      endpointVersion,
       shouldConnect,
       isConnected,
       dataHistoryLength: dataHistory.length,
@@ -1062,7 +1031,6 @@ export default function SystemStatsCharts({
   }, [
     endpointId,
     endpointOS,
-    endpointVersion,
     shouldConnect,
     isConnected,
     dataHistory.length,
@@ -1076,29 +1044,24 @@ export default function SystemStatsCharts({
   // 如果不满足启动条件，显示提示信息
   if (!shouldConnect) {
     // 在实验模式下显示为什么不能连接的原因
-    if ( endpointId) {
+    if (endpointId) {
       const reasons = [];
 
       if (endpointOS?.toLowerCase() !== "linux") {
         reasons.push(
-          t("details.systemMonitor.osNotSupported", { current: endpointOS || "未知" }),
+          t("details.systemMonitor.osNotSupported", {
+            current: endpointOS || "未知",
+          }),
         );
       }
-      if (
-        !endpointVersion ||
-        !isVersionGreaterOrEqual(endpointVersion, "1.6.0")
-      ) {
-        reasons.push(
-          t("details.systemMonitor.versionNotSupported", { current: endpointVersion || "未知" }),
-        );
-      }
-
       if (reasons.length > 0) {
         return (
           <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="sm:col-span-2 lg:col-span-4 p-4">
               <div className="text-center text-sm text-default-500">
-                <div className="mb-2">⚠️ {t("details.systemMonitor.unavailable")}</div>
+                <div className="mb-2">
+                  ⚠️ {t("details.systemMonitor.unavailable")}
+                </div>
                 <div className="text-xs space-y-1">
                   {reasons.map((reason, index) => (
                     <div key={index}>• {reason}</div>
@@ -1121,7 +1084,9 @@ export default function SystemStatsCharts({
         <Card className="p-3 bg-warning-50 dark:bg-warning-900/20 border-warning-200">
           <div className="flex items-center gap-2 text-warning-700 dark:text-warning-300">
             <div className="w-2 h-2 rounded-full bg-warning-500 animate-pulse" />
-            <span className="text-sm">{t("details.systemMonitor.connecting")}</span>
+            <span className="text-sm">
+              {t("details.systemMonitor.connecting")}
+            </span>
           </div>
         </Card>
       )}
@@ -1150,7 +1115,9 @@ export default function SystemStatsCharts({
         <Card className="p-3 bg-primary-50 dark:bg-primary-900/20 border-primary-200">
           <div className="flex items-center gap-2 text-primary-700 dark:text-primary-300">
             <div className="w-2 h-2 rounded-full bg-primary-500" />
-            <span className="text-sm">{t("details.systemMonitor.connected")}</span>
+            <span className="text-sm">
+              {t("details.systemMonitor.connected")}
+            </span>
           </div>
         </Card>
       )}

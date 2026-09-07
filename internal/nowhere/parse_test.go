@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -111,7 +112,7 @@ func TestTunnelConfigJSONUsesDetailsFieldNames(t *testing.T) {
 	if err := json.Unmarshal(payload, &fields); err != nil {
 		t.Fatalf("decode details config: %v", err)
 	}
-	for _, key := range []string{"listenHost", "listenPort", "sharedKey", "tlsMode", "poolSize", "logLevel"} {
+	for _, key := range []string{"listenHost", "listenPort", "sharedKey", "tlsMode", "mux", "logLevel"} {
 		if _, ok := fields[key]; !ok {
 			t.Fatalf("camelCase field %q missing from %s", key, payload)
 		}
@@ -144,7 +145,7 @@ func TestParseInstanceTunnelKeepsRequiredCommandValues(t *testing.T) {
 }
 
 func TestPortalURLRoundTrip(t *testing.T) {
-	raw := "portal://secret@0.0.0.0:2077?net=tcp&tls=2&crt=%2Fcert.pem&key=%2Fkey.pem&alpn=now%2Fprivate&rate=100&etar=200&dial=auto&socks=none&next=origin%40relay.example%3A2077&up=tcp&down=tcp&pool=5&sni=relay.example&pin=none&log=warn"
+	raw := "portal://secret@0.0.0.0:2077?net=tcp&tls=2&crt=%2Fcert.pem&key=%2Fkey.pem&alpn=now%2Fprivate&rate=100&etar=200&dial=auto&socks=none&next=origin%40relay.example%3A2077&up=mix&down=tcp&mux=1&sni=relay.example&pin=none&log=warn"
 	parsed := ParseTunnelURL(raw)
 	if parsed.Type != models.TunnelTypePortal {
 		t.Fatalf("expected portal type, got %q", parsed.Type)
@@ -162,8 +163,36 @@ func TestPortalURLRoundTrip(t *testing.T) {
 	if rebuilt.Next == nil || *rebuilt.Next != "origin@relay.example:2077" {
 		t.Fatalf("next was not preserved: %#v", rebuilt.Next)
 	}
-	if rebuilt.PoolSize == nil || *rebuilt.PoolSize != 5 {
-		t.Fatalf("pool was not preserved")
+	if rebuilt.Mux == nil || *rebuilt.Mux != "1" {
+		t.Fatalf("mux was not preserved")
+	}
+	if rebuilt.Up == nil || *rebuilt.Up != "mix" {
+		t.Fatalf("mixed carrier policy was not preserved")
+	}
+}
+
+func TestParseLegacyPoolAsMux(t *testing.T) {
+	parsed := ParseTunnelURL("portal://secret@:2077?next=origin%40relay.example%3A2077&up=tcp&down=tcp&pool=5")
+	if parsed.Mux == nil || *parsed.Mux != "1" {
+		t.Fatalf("legacy pool was not migrated to mux: %#v", parsed.Mux)
+	}
+	rebuilt := BuildTunnelURLs(*parsed)
+	if strings.Contains(rebuilt, "pool=") || !strings.Contains(rebuilt, "mux=1") {
+		t.Fatalf("legacy pool was not replaced in rebuilt URL: %s", rebuilt)
+	}
+}
+
+func TestPortalCanonicalizesUDPMux(t *testing.T) {
+	parsed := ParseTunnelURL("portal://secret@:2077?next=origin%40relay.example%3A2077&up=udp&down=udp&mux=1")
+	if err := ValidatePortalTunnel(*parsed); err != nil {
+		t.Fatalf("Nowhere accepts udp/udp with mux enabled: %v", err)
+	}
+	rebuilt, err := url.Parse(BuildTunnelURLs(*parsed))
+	if err != nil {
+		t.Fatalf("parse rebuilt URL: %v", err)
+	}
+	if rebuilt.Query().Get("mux") != "0" {
+		t.Fatalf("udp/udp mux was not canonicalized: %s", rebuilt)
 	}
 }
 
@@ -189,6 +218,13 @@ func TestPortalRejectsConflictingOptions(t *testing.T) {
 	}
 }
 
+func TestPortalRejectsInvalidMux(t *testing.T) {
+	invalid := ParseTunnelURL("portal://secret@:2077?next=secret%40relay.example%3A2077&mux=2")
+	if err := ValidatePortalTunnel(*invalid); err == nil {
+		t.Fatal("mux values other than 0 or 1 must be rejected")
+	}
+}
+
 func TestBuildVectorURL(t *testing.T) {
 	portal := ParseTunnelURL("portal://secret@:2077?net=tcp&alpn=now%2Fprivate&rate=100&etar=200&log=warn")
 	vector, err := BuildVectorURL(*portal, "portal.example", "127.0.0.1:1080")
@@ -203,11 +239,29 @@ func TestBuildVectorURL(t *testing.T) {
 		t.Fatalf("unexpected Vector URL: %s", vector)
 	}
 	query := parsed.Query()
-	if query.Get("up") != "tcp" || query.Get("down") != "tcp" || query.Get("pool") != "5" {
+	if query.Get("up") != "tcp" || query.Get("down") != "tcp" || query.Get("mux") != "1" {
 		t.Fatalf("tcp carrier mapping is wrong: %s", vector)
+	}
+	if query.Has("pool") {
+		t.Fatalf("legacy pool parameter is still present: %s", vector)
 	}
 	if query.Get("socks") != "127.0.0.1:1080" || query.Get("alpn") != "now/private" {
 		t.Fatalf("Vector settings were not preserved: %s", vector)
+	}
+}
+
+func TestBuildVectorURLMapsMixedPortalToMixedCarriers(t *testing.T) {
+	portal := ParseTunnelURL("portal://secret@:2077?net=mix")
+	vector, err := BuildVectorURL(*portal, "portal.example", "")
+	if err != nil {
+		t.Fatalf("build Vector URL: %v", err)
+	}
+	parsed, err := url.Parse(vector)
+	if err != nil {
+		t.Fatalf("parse Vector URL: %v", err)
+	}
+	if parsed.Query().Get("up") != "mix" || parsed.Query().Get("down") != "mix" || parsed.Query().Get("mux") != "1" {
+		t.Fatalf("mixed carrier mapping is wrong: %s", vector)
 	}
 }
 

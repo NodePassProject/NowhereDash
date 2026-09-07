@@ -31,11 +31,11 @@ const PORTAL_EFFECTIVE_QUERY_KEYS = new Set([
   "next",
   "up",
   "down",
-  "pool",
+  "mux",
   "sni",
   "pin",
 ]);
-const NEXT_ONLY_QUERY_KEYS = new Set(["up", "down", "pool", "sni", "pin"]);
+const NEXT_ONLY_QUERY_KEYS = new Set(["up", "down", "mux", "sni", "pin"]);
 
 interface ParsedPortalUrl {
   hostname: string;
@@ -269,8 +269,8 @@ export const deriveVectorUrl = (
   if (!sharedKey || !listenPort || !publicHost) return null;
 
   const network = (fromUrl.network ?? tunnel.network ?? "mix").toLowerCase();
-  const carrier = network === "tcp" ? "tcp" : "udp";
-  const pool = carrier === "tcp" ? 5 : 0;
+  const carrier = ["mix", "tcp", "udp"].includes(network) ? network : "mix";
+  const mux = carrier === "udp" ? 0 : 1;
   const alpn = fromUrl.alpn ?? tunnel.alpn ?? "now/1";
   const rate = fromUrl.rate ?? tunnel.rate ?? 0;
   const etar = fromUrl.etar ?? tunnel.etar ?? 0;
@@ -279,7 +279,7 @@ export const deriveVectorUrl = (
   const query = [
     ["up", carrier],
     ["down", carrier],
-    ["pool", pool],
+    ["mux", mux],
     ["sni", "none"],
     ["pin", "none"],
     ["alpn", alpn],

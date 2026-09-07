@@ -857,7 +857,7 @@ func (h *EndpointHandler) HandleGetEndpointInfo(c *gin.Context) {
 		} else {
 			// 在日志中显示uptime信息
 			uptimeMsg := fmt.Sprintf("%d秒", info.Uptime)
-			log.Infof("[Master-%v] 系统信息已更新: OS=%s, Arch=%s, Ver=%s, Uptime=%s", ep.ID, info.OS, info.Arch, info.Ver, uptimeMsg)
+			log.Infof("[Master-%v] 系统信息已更新: OS=%s, Arch=%s, Uptime=%s", ep.ID, info.OS, info.Arch, uptimeMsg)
 		}
 
 		c.JSON(http.StatusOK, endpoint.EndpointResponse{
@@ -882,12 +882,6 @@ func (h *EndpointHandler) HandleGetEndpointInfo(c *gin.Context) {
 			Arch: func() string {
 				if ep.Arch != nil {
 					return *ep.Arch
-				}
-				return ""
-			}(),
-			Ver: func() string {
-				if ep.Ver != nil {
-					return *ep.Ver
 				}
 				return ""
 			}(),
@@ -971,7 +965,7 @@ func (h *EndpointHandler) HandleGetEndpointDetail(c *gin.Context) {
 			} else {
 				// 在日志中显示uptime信息
 				uptimeMsg := fmt.Sprintf("%d秒", info.Uptime)
-				log.Infof("[Master-%v] 详情页刷新：系统信息已更新: OS=%s, Arch=%s, Ver=%s, Uptime=%s", ep.ID, info.OS, info.Arch, info.Ver, uptimeMsg)
+				log.Infof("[Master-%v] 详情页刷新：系统信息已更新: OS=%s, Arch=%s, Uptime=%s", ep.ID, info.OS, info.Arch, uptimeMsg)
 			}
 		}
 	}()
@@ -1279,7 +1273,7 @@ func (h *EndpointHandler) fetchAndUpdateEndpointInfo(endpointID int64) {
 		} else {
 			// 在日志中显示uptime信息
 			uptimeMsg := fmt.Sprintf("%d秒", info.Uptime)
-			log.Infof("[Master-%d] 系统信息已更新: OS=%s, Arch=%s, Ver=%s, Uptime=%s", endpointID, info.OS, info.Arch, info.Ver, uptimeMsg)
+			log.Infof("[Master-%d] 系统信息已更新: OS=%s, Arch=%s, Uptime=%s", endpointID, info.OS, info.Arch, uptimeMsg)
 		}
 	}
 }

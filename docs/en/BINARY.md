@@ -1,23 +1,24 @@
 # Unified Binary Deployment
 
-`scripts/install.sh` deploys NowhereDash or a Nowhere node managed by OpenCtrl.
+`scripts/install.sh` deploys components on Linux/macOS, while `scripts/install.ps1` is the native Windows installer. A target can be NowhereDash or a Nowhere node managed by OpenCtrl.
 
-| Target | Installed components | Service |
-| --- | --- | --- |
-| `dash` | NowhereDash | `nowheredash.service` |
-| `nowhere` / `openctrl` | OpenCtrl and the Nowhere runtime | `openctrl.service` |
-| `all` | All components above | Both services |
+| Target | Installed components |
+| --- | --- |
+| `dash` | NowhereDash |
+| `nowhere` / `openctrl` | OpenCtrl and the Nowhere runtime |
+| `all` | All components above |
 
 `nowhere` and `openctrl` are aliases for the same target. This target does not create one fixed Portal service. OpenCtrl uses Nowhere as its managed runtime, and NowhereDash creates and manages Portal or Vector instances through the OpenCtrl API.
 
 ## Requirements
 
-- Linux with systemd and root access.
-- x86_64 or arm64 for the node; the installer selects the glibc or musl release automatically.
-- See NowhereDash Releases for supported Dash architectures.
+- Linux: systemd and root access; node support for x86_64 and arm64.
+- Linux nodes always use the statically linked `unknown-linux-musl` Nowhere asset and do not depend on the host glibc version.
+- macOS: Apple Silicon (arm64) nodes only, using launchd with root access. NowhereDash does not currently publish a macOS release.
+- Windows: x86_64 nodes and Dash, using an Administrator PowerShell session and Windows Task Scheduler.
 - Outbound access to GitHub Releases.
 
-The installer installs missing base utilities and creates a separate non-login user for each service.
+On Linux, the installer installs missing base utilities and creates a separate non-login user for each service. The macOS node runs as the system `nobody` account, and Windows tasks run as `SYSTEM`.
 
 ## Download the Installer
 
@@ -34,6 +35,16 @@ Running it without arguments opens the interactive menu:
 
 ```bash
 sudo /tmp/nowheredash-install.sh
+```
+
+Use the native PowerShell installer on Windows:
+
+```powershell
+Invoke-WebRequest `
+  https://raw.githubusercontent.com/NodePassProject/NowhereDash/main/scripts/install.ps1 `
+  -OutFile $env:TEMP\nowheredash-install.ps1
+Set-ExecutionPolicy -Scope Process Bypass
+& $env:TEMP\nowheredash-install.ps1 status all
 ```
 
 ## Install Nowhere and OpenCtrl
@@ -73,6 +84,35 @@ sudo /tmp/nowheredash-install.sh install nowhere \
 ```
 
 `--openctrl-tls 0` uses plaintext HTTP and should only be used on a trusted network or behind a TLS reverse proxy. The installer does not issue certificates or stop an existing web server.
+
+### macOS Apple Silicon
+
+macOS uses the same Bash installer. It selects `openctrl_*_darwin_arm64.tar.gz` and `nowhere-aarch64-apple-darwin.tar.gz`, then registers `/Library/LaunchDaemons/com.nodepass.openctrl.plist`:
+
+```bash
+sudo /tmp/nowheredash-install.sh install nowhere \
+  --openctrl-public-host node.example.com
+sudo nowhere-ctl status
+```
+
+The launchd job uses an unprivileged account, so the OpenCtrl port must be 1024 or higher on macOS. Intel Macs and the `dash` target on macOS produce an explicit unsupported-platform error because the corresponding Nowhere/NowhereDash release assets do not currently exist.
+
+### Windows x86_64
+
+Install a node from an Administrator PowerShell session. The installer selects `openctrl_*_windows_amd64.tar.gz` and `nowhere-x86_64-pc-windows-msvc.zip`, then creates an `OpenCtrl` startup task:
+
+```powershell
+& $env:TEMP\nowheredash-install.ps1 install nowhere `
+  -OpenCtrlPublicHost node.example.com
+& $env:TEMP\nowheredash-install.ps1 status nowhere
+```
+
+Install Dash on Windows with:
+
+```powershell
+& $env:TEMP\nowheredash-install.ps1 install dash -DashPort 4000
+& $env:TEMP\nowheredash-install.ps1 update all
+```
 
 On success, it prints npsh-style connection details:
 
@@ -186,6 +226,13 @@ sudo /tmp/nowheredash-install.sh status all
 
 Updates preserve configuration and data. If the new service fails its startup or API checks, the installer attempts to restore the previous binary.
 
+Windows uses the same `update`, `status`, and `uninstall` actions, for example:
+
+```powershell
+& $env:TEMP\nowheredash-install.ps1 update nowhere
+& $env:TEMP\nowheredash-install.ps1 uninstall nowhere -Yes
+```
+
 ## Uninstall
 
 Uninstalling a Nowhere node completely removes OpenCtrl, node state, the API key, configuration, and installer-generated certificates:
@@ -219,6 +266,8 @@ sudo /tmp/nowheredash-install.sh uninstall all --purge --yes
 | OpenCtrl service | `/etc/systemd/system/openctrl.service` |
 
 The API key and OpenCtrl state contain sensitive information. Do not expose `/etc/openctrl` or `/opt/openctrl/bin/gob` to untrusted users.
+
+The macOS node uses `/opt/openctrl`, `/etc/openctrl`, and `/etc/nowhere/certs`, with its service definition at `/Library/LaunchDaemons/com.nodepass.openctrl.plist`. Windows uses `%ProgramData%\OpenCtrl`, `%ProgramData%\OpenCtrlConfig`, and `%ProgramData%\NowhereDash`; sensitive directory ACLs permit only `SYSTEM` and administrators.
 
 ## Run NowhereDash Manually
 

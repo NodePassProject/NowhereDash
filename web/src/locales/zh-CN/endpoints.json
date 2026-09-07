@@ -12,7 +12,6 @@
     "columns": {
       "id": "ID",
       "name": "名称",
-      "version": "版本",
       "url": "URL",
       "apiKey": "API Key",
       "status": "状态",
@@ -135,7 +134,6 @@
     "importedName": "导入的节点",
     "testResultTitle": "连接检测结果",
     "connectionStatus": "连接状态",
-    "endpointVersion": "节点版本",
     "canAdd": "支持添加",
     "statusSuccess": "成功",
     "statusFailed": "失败",
@@ -194,10 +192,9 @@
     "validateColumns": {
       "name": "名称",
       "url": "URL",
-      "version": "版本",
       "status": "状态"
     },
-    "validateNote": "注意:只有版本 ≥ 1.10.0 的节点才会被导入,低版本或连接失败的节点将被自动跳过。拖动行可调整导入顺序。",
+    "validateNote": "注意:不兼容或连接失败的节点将被自动跳过。拖动行可调整导入顺序。",
     "confirmImport": "确认导入",
     "importing": "导入中...",
     "importSuccess": "✓ 可导入",
@@ -321,6 +318,7 @@
       "clearLogs": "清空日志",
       "backupInstances": "备份隧道",
       "restoreInstances": "恢复隧道",
+      "uninstall": "卸载节点",
       "delete": "删除节点",
       "sections": {
         "instances": "Instances",
@@ -329,7 +327,7 @@
         "data": "Data",
         "dangerZone": "Danger Zone"
       },
-      "dangerHint": "此操作不可恢复，请谨慎确认"
+      "dangerHint": "卸载节点服务或删除控制台记录前，请确认操作目标"
     },
     "info": {
       "title": "节点信息",
@@ -454,6 +452,17 @@
         "cancel": "取消",
         "confirm": "确认清空"
       },
+      "uninstallCommand": {
+        "title": "卸载节点",
+        "warning": "请在该节点主机的管理员终端中执行此命令。卸载会停止服务，并永久删除 OpenCtrl、Nowhere、节点状态、API Key、配置和证书。",
+        "platformLabel": "节点操作系统",
+        "unix": "Linux / macOS",
+        "windows": "Windows",
+        "commandLabel": "卸载命令",
+        "cancel": "关闭",
+        "copy": "复制命令",
+        "copied": "节点卸载命令已复制到剪贴板"
+      },
       "deleteEndpoint": {
         "title": "删除节点",
         "warningTitle": "⚠️ 危险操作",
@@ -569,7 +578,7 @@
       "connected": "已连接，等待数据...",
       "unavailable": "系统监控图表不可用",
       "osNotSupported": "操作系统不支持(当前: {{current}}, 需要: Linux)",
-      "versionNotSupported": "版本不支持(当前: {{current}}, 需要: >=1.6.0)"
+      "capabilityNotSupported": "当前节点不支持系统监控"
     },
     "sseDebug": {
       "button": "SSE调试",

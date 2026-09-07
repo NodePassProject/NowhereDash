@@ -106,13 +106,13 @@ func TestPersistCreatedPortalReconcilesSSEInsert(t *testing.T) {
 	newTags := map[string]string{"region": "sg"}
 	newSID := "api-peer"
 	restartTrue := true
-	rate, etar, poolSize := int64(100), int64(200), int64(8)
+	rate, etar, mux := int64(100), int64(200), "1"
 	incoming := models.Tunnel{
 		Name: "API Portal", EndpointID: endpoint.ID, InstanceID: &instanceID,
 		Type: models.TunnelTypePortal, Status: models.TunnelStatusStopped,
 		ListenHost: "::", ListenPort: "20001", TLSMode: models.TLS1,
 		CommandLine: "portal://api-key@[::]:20001", SharedKey: &newKey, Network: &newNetwork,
-		ALPN: &alpn, Rate: &rate, Etar: &etar, PoolSize: &poolSize,
+		ALPN: &alpn, Rate: &rate, Etar: &etar, Mux: &mux,
 		Restart: &restartTrue, Tags: &newTags, Peer: &models.Peer{SID: &newSID, Type: &peerType},
 		EnableLogStore: true, Sorts: 42,
 		TCPRx: 901, TCPTx: 902, UDPRx: 903, UDPTx: 904,
@@ -143,7 +143,7 @@ func TestPersistCreatedPortalReconcilesSSEInsert(t *testing.T) {
 		stored.CommandLine != "portal://api-key@[::]:20001" || stored.SharedKey == nil || *stored.SharedKey != newKey ||
 		stored.Network == nil || *stored.Network != newNetwork || stored.ALPN == nil || *stored.ALPN != alpn ||
 		stored.Rate == nil || *stored.Rate != rate || stored.Etar == nil || *stored.Etar != etar ||
-		stored.PoolSize == nil || *stored.PoolSize != poolSize || stored.Restart == nil || !*stored.Restart ||
+		stored.Mux == nil || *stored.Mux != mux || stored.Restart == nil || !*stored.Restart ||
 		!stored.EnableLogStore || stored.Sorts != 42 {
 		t.Fatalf("API configuration was not applied: %+v", stored)
 	}

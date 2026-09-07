@@ -36,7 +36,7 @@
     "loadFailed": "订阅状态加载失败",
     "retry": "重试",
     "emptyTitle": "还没有订阅",
-    "emptyHint": "创建订阅后，可在首页快速查看到期和流量状态。",
+    "emptyHint": "集中查看到期与流量状态",
     "create": "创建订阅",
     "status": {
       "active": "正常",

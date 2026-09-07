@@ -12,7 +12,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const BackupVersion = 2
+const (
+	BackupVersion       = 3
+	LegacyBackupVersion = 2
+)
 
 type BackupInstance struct {
 	Name       string             `json:"name"`
@@ -32,7 +35,8 @@ type BackupInstance struct {
 	Next       *string            `json:"next"`
 	Up         *string            `json:"up"`
 	Down       *string            `json:"down"`
-	PoolSize   *int64             `json:"poolSize,omitempty"`
+	Mux        *string            `json:"mux,omitempty"`
+	PoolSize   *int64             `json:"poolSize,omitempty"` // Legacy v2 import only.
 	Sni        *string            `json:"sni,omitempty"`
 	Pin        *string            `json:"pin,omitempty"`
 	LogLevel   string             `json:"logLevel"`
@@ -42,10 +46,9 @@ type BackupInstance struct {
 }
 
 type BackupSource struct {
-	EndpointID   int64   `json:"endpointId"`
-	EndpointName string  `json:"endpointName"`
-	EndpointURL  string  `json:"endpointUrl"`
-	EndpointVer  *string `json:"endpointVer,omitempty"`
+	EndpointID   int64  `json:"endpointId"`
+	EndpointName string `json:"endpointName"`
+	EndpointURL  string `json:"endpointUrl"`
 }
 
 type BackupExport struct {
@@ -78,7 +81,7 @@ func tunnelToBackupInstance(item models.Tunnel) BackupInstance {
 		ListenPort: item.ListenPort, SharedKey: item.SharedKey, Network: item.Network,
 		TLSMode: string(item.TLSMode), CertPath: item.CertPath, KeyPath: item.KeyPath,
 		ALPN: item.ALPN, Rate: item.Rate, Etar: item.Etar, Dial: item.Dial, Socks: item.Socks,
-		Next: item.Next, Up: item.Up, Down: item.Down, PoolSize: item.PoolSize, Sni: item.Sni,
+		Next: item.Next, Up: item.Up, Down: item.Down, Mux: item.Mux, Sni: item.Sni,
 		Pin: item.Pin, LogLevel: string(item.LogLevel), Restart: item.Restart, Tags: item.Tags, Peer: item.Peer,
 	}
 }
@@ -95,12 +98,19 @@ func (item BackupInstance) portalRequest(endpointID int64) tunnel.PortalRequest 
 	if item.Restart != nil {
 		restart = *item.Restart
 	}
+	mux := backupValue(item.Mux)
+	if mux == "" {
+		mux = "0"
+		if item.PoolSize != nil && *item.PoolSize > 0 {
+			mux = "1"
+		}
+	}
 	return tunnel.PortalRequest{
 		Name: item.Name, EndpointID: endpointID, ListenHost: item.ListenHost, ListenPort: item.ListenPort,
 		SharedKey: backupValue(item.SharedKey), Network: backupValue(item.Network), TLSMode: models.TLSMode(item.TLSMode),
 		CertPath: backupValue(item.CertPath), KeyPath: backupValue(item.KeyPath), ALPN: backupValue(item.ALPN),
 		Rate: item.Rate, Etar: item.Etar, Dial: backupValue(item.Dial), Socks: backupValue(item.Socks),
-		Next: backupValue(item.Next), Up: backupValue(item.Up), Down: backupValue(item.Down), PoolSize: item.PoolSize,
+		Next: backupValue(item.Next), Up: backupValue(item.Up), Down: backupValue(item.Down), Mux: mux,
 		Sni: backupValue(item.Sni), Pin: backupValue(item.Pin), LogLevel: models.LogLevel(item.LogLevel),
 		Restart: restart, Tags: item.Tags, Peer: item.Peer, EnableStore: true,
 	}
@@ -113,7 +123,7 @@ func (h *TunnelHandler) HandleBackupInstances(c *gin.Context) {
 		return
 	}
 	var endpoint models.Endpoint
-	if err = h.tunnelService.GormDB().Select("id, name, url, api_path, ver").First(&endpoint, endpointID).Error; err != nil {
+	if err = h.tunnelService.GormDB().Select("id, name, url, api_path").First(&endpoint, endpointID).Error; err != nil {
 		status := http.StatusInternalServerError
 		if err == gorm.ErrRecordNotFound {
 			status = http.StatusNotFound
@@ -132,7 +142,7 @@ func (h *TunnelHandler) HandleBackupInstances(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": BackupExport{
 		Version: BackupVersion, ExportedAt: time.Now(), Count: len(instances), Instances: instances,
-		Source: BackupSource{EndpointID: endpoint.ID, EndpointName: endpoint.Name, EndpointURL: endpoint.URL + endpoint.APIPath, EndpointVer: endpoint.Ver},
+		Source: BackupSource{EndpointID: endpoint.ID, EndpointName: endpoint.Name, EndpointURL: endpoint.URL + endpoint.APIPath},
 	}})
 }
 
@@ -147,8 +157,8 @@ func (h *TunnelHandler) HandleImportInstances(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 		return
 	}
-	if input.Version != BackupVersion {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Only NowhereDash backup version 2 is supported"})
+	if input.Version != LegacyBackupVersion && input.Version != BackupVersion {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Only NowhereDash backup versions 2 and 3 are supported"})
 		return
 	}
 	var endpointCount int64

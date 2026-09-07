@@ -21,10 +21,13 @@ import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { buildApiUrl } from "@/lib/utils";
-import Image from "@/components/common/image";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { LanguageSwitch } from "@/components/language-switch";
 import { Footer } from "@/components/layout/footer";
+import {
+  NowhereBrandLabel,
+  NowhereLogo,
+} from "@/components/layout/navbar-logo";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -47,8 +50,6 @@ export default function LoginPage() {
   const [isLoginDisabled, setIsLoginDisabled] = useState(false);
   // 系统配置错误状态
   const [systemError, setSystemError] = useState("");
-
-  const logoSrc = "/nowhere.png";
 
   useEffect(() => {
     /**
@@ -184,22 +185,15 @@ export default function LoginPage() {
 
               <motion.div
                 animate={{ scale: 1 }}
-                className="flex h-16 w-32 items-center justify-center mb-4 overflow-hidden rounded-md"
+                className="mb-4 flex h-16 w-16 items-center justify-center"
                 initial={{ scale: 0 }}
                 transition={{ delay: 0.2, type: "spring" }}
               >
                 {/* 根据主题动态渲染 Logo */}
-                <Image
-                  priority
-                  alt="Nowhere"
-                  className="h-16 w-32 object-cover"
-                  height={64}
-                  src={logoSrc}
-                  width={128}
-                />
+                <NowhereLogo className="h-16 w-16" />
               </motion.div>
-              <h1 className="text-2xl font-bold text-foreground">
-                {t("login.title")}
+              <h1>
+                <NowhereBrandLabel className="pl-0 text-2xl" />
               </h1>
               {/* 仅当允许用户名密码登录时显示提示文案 */}
               {!isLoginDisabled && (

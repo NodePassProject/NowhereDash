@@ -62,7 +62,7 @@ func TestTunnelDetailsUsesExpandedConfigURL(t *testing.T) {
 	if response.CommandURL != commandURL || response.ConfigURL != configURL {
 		t.Fatalf("details URLs = command:%q config:%q", response.CommandURL, response.ConfigURL)
 	}
-	if response.Config["network"] != "tcp" || response.Config["sharedKey"] != "runtime" || response.Config["rate"] != "0" {
+	if response.Config["network"] != "tcp" || response.Config["sharedKey"] != "runtime" || response.Config["rate"] != "0" || response.Config["mux"] != "0" {
 		t.Fatalf("details config did not use expanded URL: %#v", response.Config)
 	}
 	if response.Tunnel.Network == nil || *response.Tunnel.Network != "tcp" || response.Tunnel.SharedKey == nil ||
@@ -78,7 +78,7 @@ func TestTunnelDetailsUsesExpandedConfigURL(t *testing.T) {
 		t.Fatalf("parse Vector URL: %v", err)
 	}
 	if vectorURL.Scheme != "nowhere" || vectorURL.User == nil || vectorURL.User.Username() != "runtime" || vectorURL.Host != "portal.example:2077" ||
-		vectorURL.Query().Get("up") != "tcp" || vectorURL.Query().Get("down") != "tcp" {
+		vectorURL.Query().Get("up") != "tcp" || vectorURL.Query().Get("down") != "tcp" || vectorURL.Query().Get("mux") != "1" {
 		t.Fatalf("Vector URL did not use expanded config: %s", response.VectorURL)
 	}
 }

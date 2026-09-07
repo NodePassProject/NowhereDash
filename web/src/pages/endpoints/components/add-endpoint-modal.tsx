@@ -58,7 +58,6 @@ export default function AddEndpointModal({
   const [testResult, setTestResult] = useState<{
     success: boolean;
     connected: boolean;
-    version: string;
     canAdd: boolean;
     message: string;
   } | null>(null);
@@ -142,7 +141,10 @@ export default function AddEndpointModal({
       // 当 URL 改变且 connectionIP 为空时，自动解析并填充
       if (field === "url") {
         const extractedIP = extractIPFromURL(value);
-        if (!prev.connectionIP || prev.connectionIP === extractIPFromURL(prev.url)) {
+        if (
+          !prev.connectionIP ||
+          prev.connectionIP === extractIPFromURL(prev.url)
+        ) {
           updated.connectionIP = extractedIP;
         }
       }
@@ -168,8 +170,8 @@ export default function AddEndpointModal({
     return { baseUrl: fullUrl, apiPath: "/api/v2" };
   };
 
-  // 测试连接并检查版本
-  const testConnectionAndVersion = async () => {
+  // 测试连接并检查兼容性
+  const testConnectionCompatibility = async () => {
     if (!formData.url || !formData.apiKey) {
       addToast({
         title: t("toast.incompleteParams"),
@@ -185,8 +187,7 @@ export default function AddEndpointModal({
     try {
       const { baseUrl, apiPath } = parseUrl(formData.url);
 
-      // 调用新的接口：测试连接并获取版本信息
-      const response = await fetch("/api/sse/test-with-version", {
+      const response = await fetch("/api/sse/test-compatibility", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -211,9 +212,7 @@ export default function AddEndpointModal({
       addToast({
         title: t("toast.testFailed"),
         description:
-          error instanceof Error
-            ? error.message
-            : t("toast.testFailedDesc"),
+          error instanceof Error ? error.message : t("toast.testFailedDesc"),
         color: "danger",
       });
     } finally {
@@ -309,7 +308,9 @@ export default function AddEndpointModal({
         {(onClose) => (
           <>
             <ModalHeader className="flex flex-col gap-1">
-              {step === "form" ? t("addModal.title") : t("addModal.importModalTitle")}
+              {step === "form"
+                ? t("addModal.title")
+                : t("addModal.importModalTitle")}
             </ModalHeader>
             <ModalBody className="px-6 pb-6 pt-0">
               <div className="relative">
@@ -322,7 +323,7 @@ export default function AddEndpointModal({
                       exit={{ opacity: 0 }}
                       transition={{
                         duration: 0.25,
-                        ease: "easeInOut"
+                        ease: "easeInOut",
                       }}
                     >
                       <div className="flex flex-col items-start">
@@ -357,7 +358,9 @@ export default function AddEndpointModal({
                             />
                           </Badge>
                           <div className="flex flex-col items-start justify-center">
-                            <p className="font-medium">{t("addModal.importConfig")}</p>
+                            <p className="font-medium">
+                              {t("addModal.importConfig")}
+                            </p>
                             <span className="text-small text-default-500">
                               {t("addModal.importDesc")}
                             </span>
@@ -380,7 +383,9 @@ export default function AddEndpointModal({
                           name="name"
                           placeholder={t("addModal.namePlaceholder")}
                           value={formData.name}
-                          onValueChange={(value) => handleInputChange("name", value)}
+                          onValueChange={(value) =>
+                            handleInputChange("name", value)
+                          }
                         />
                         {/* URL 地址（包含API前缀） */}
                         <Input
@@ -392,7 +397,9 @@ export default function AddEndpointModal({
                           placeholder={t("addModal.urlPlaceholder")}
                           type="url"
                           value={formData.url}
-                          onValueChange={(value) => handleInputChange("url", value)}
+                          onValueChange={(value) =>
+                            handleInputChange("url", value)
+                          }
                         />
                         {/* API Key */}
                         <Input
@@ -424,7 +431,7 @@ export default function AddEndpointModal({
                           }
                         />
                         {/* 连接 IP（仅在 URL 有效时显示） */}
-                        {formData.url  && (
+                        {formData.url && (
                           <Input
                             className="md:col-span-1"
                             label={t("addModal.connectionIPLabel")}
@@ -441,7 +448,11 @@ export default function AddEndpointModal({
 
                       <div className="mt-6 flex w-full justify-end gap-2">
                         <div className="flex gap-2">
-                          <Button radius="full" variant="bordered" onPress={onClose}>
+                          <Button
+                            radius="full"
+                            variant="bordered"
+                            onPress={onClose}
+                          >
                             {t("addModal.cancel")}
                           </Button>
                           <Button
@@ -453,9 +464,11 @@ export default function AddEndpointModal({
                                 <FontAwesomeIcon icon={faWifi} />
                               )
                             }
-                            onPress={testConnectionAndVersion}
+                            onPress={testConnectionCompatibility}
                           >
-                            {isTestingConnection ? t("addModal.testing") : t("addModal.testAndAdd")}
+                            {isTestingConnection
+                              ? t("addModal.testing")
+                              : t("addModal.testAndAdd")}
                           </Button>
                         </div>
                       </div>
@@ -470,7 +483,7 @@ export default function AddEndpointModal({
                       exit={{ opacity: 0 }}
                       transition={{
                         duration: 0.25,
-                        ease: "easeInOut"
+                        ease: "easeInOut",
                       }}
                     >
                       <Textarea
@@ -525,15 +538,9 @@ export default function AddEndpointModal({
                                 <span
                                   className={`text-sm ${testResult.connected ? "text-success" : "text-danger"}`}
                                 >
-                                  {testResult.connected ? t("addModal.statusSuccess") : t("addModal.statusFailed")}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold">
-                                  {t("addModal.endpointVersion")}：
-                                </span>
-                                <span className="text-sm">
-                                  {testResult.version}
+                                  {testResult.connected
+                                    ? t("addModal.statusSuccess")
+                                    : t("addModal.statusFailed")}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2">
@@ -543,7 +550,9 @@ export default function AddEndpointModal({
                                 <span
                                   className={`text-sm ${testResult.canAdd ? "text-success" : "text-danger"}`}
                                 >
-                                  {testResult.canAdd ? t("addModal.statusYes") : t("addModal.statusNo")}
+                                  {testResult.canAdd
+                                    ? t("addModal.statusYes")
+                                    : t("addModal.statusNo")}
                                 </span>
                               </div>
                             </div>

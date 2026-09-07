@@ -57,8 +57,6 @@ interface EndpointInfo {
   name: string;
   hostname?: string;
   url?: string;
-  ver?: string;
-  version?: string;
 }
 
 interface PeerMetadata {
@@ -352,7 +350,6 @@ export default function TunnelDetailPage() {
             portalInfo: "隧道信息",
             instanceId: "实例 ID",
             endpoint: "节点",
-            version: "版本",
             listen: "监听地址",
             sharedKey: "共享密钥",
             hideKey: "隐藏共享密钥",
@@ -451,7 +448,6 @@ export default function TunnelDetailPage() {
             portalInfo: "Tunnel information",
             instanceId: "Instance ID",
             endpoint: "Node",
-            version: "Version",
             listen: "Listen address",
             sharedKey: "Shared key",
             hideKey: "Hide shared key",
@@ -987,15 +983,6 @@ export default function TunnelDetailPage() {
                   label={copy.endpoint}
                   value={
                     <span className="block truncate">{endpoint.name}</span>
-                  }
-                />
-                <CellValue
-                  icon={<InfoIcon icon="lucide:git-branch" />}
-                  label={copy.version}
-                  value={
-                    <Chip color="secondary" size="sm" variant="flat">
-                      {endpoint.ver || endpoint.version || "-"}
-                    </Chip>
                   }
                 />
                 <CellValue

@@ -18,13 +18,12 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { Footer } from "./footer";
-import { NowhereLogo } from "./navbar-logo";
+import { NowhereBrandLabel, NowhereLogo } from "./navbar-logo";
 import { UpdateChip } from "./update-chip";
 import { SettingsDrawer } from "./settings-drawer";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Navbar } from "@/components/navbar";
-import { fontSans } from "@/config/fonts";
 import { getVersion } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import {
@@ -88,15 +87,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
             href="/"
           >
             <NowhereLogo />
-            <p
-              className={cn(
-                "pl-1 font-bold text-foreground",
-                isCollapsed && "hidden",
-                fontSans.className,
-              )}
-            >
-              NowhereDash
-            </p>
+            <NowhereBrandLabel className={cn(isCollapsed && "hidden")} />
           </Link>
           {/* UpdateChip 占据原 dev chip 的位置;sidebar 折叠时仍显示,展示更新提示 */}
           {!isCollapsed && <UpdateChip />}

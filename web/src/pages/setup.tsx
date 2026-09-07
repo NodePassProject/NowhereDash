@@ -29,9 +29,9 @@ import {
   SetupPayload,
   testConnection,
 } from "@/lib/api/setup";
-import Image from "@/components/common/image";
 import RowSteps from "@/components/ui/row-steps";
 import { useSettings } from "@/components/providers/settings-provider";
+import { NowhereLogo } from "@/components/layout/navbar-logo";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -122,8 +122,6 @@ export default function SetupPage() {
 
   // 网络自检子卡显示状态
   const [showNetworkCheck, setShowNetworkCheck] = useState(false);
-
-  const logoSrc = "/nowhere.png";
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -236,18 +234,11 @@ export default function SetupPage() {
               </Button>
               <motion.div
                 animate={{ scale: 1 }}
-                className="flex h-16 w-32 items-center justify-center mb-2 overflow-hidden rounded-md"
+                className="mb-2 flex h-16 w-16 items-center justify-center"
                 initial={{ scale: 0 }}
                 transition={{ delay: 0.2, type: "spring" }}
               >
-                <Image
-                  priority
-                  alt="Nowhere"
-                  className="h-16 w-32 object-cover"
-                  height={64}
-                  src={logoSrc}
-                  width={128}
-                />
+                <NowhereLogo className="h-16 w-16" />
               </motion.div>
 
               <h1 className="text-2xl font-bold text-foreground">

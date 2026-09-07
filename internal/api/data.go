@@ -89,7 +89,6 @@ type ValidateImportResult struct {
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	APIPath   string `json:"apiPath"`
-	Version   string `json:"version"`
 	CanImport bool   `json:"canImport"`
 	Message   string `json:"message"`
 	Status    string `json:"status"`
@@ -105,15 +104,14 @@ func (h *DataHandler) HandleValidateImport(c *gin.Context) {
 	for index, item := range document.Data.Endpoints {
 		item.URL = strings.TrimRight(strings.TrimSpace(item.URL), "/")
 		item.APIPath = nowhere.NormalizeAPIPath(item.APIPath)
-		result := ValidateImportResult{Name: item.Name, URL: item.URL, APIPath: item.APIPath, Version: "unknown", Status: "error"}
+		result := ValidateImportResult{Name: item.Name, URL: item.URL, APIPath: item.APIPath, Status: "error"}
 		temporaryID := int64(-1000 - index)
 		nowhere.GetCache().Set(fmt.Sprintf("%d", temporaryID), nowhere.BuildAPIBaseURL(item.URL, item.APIPath), item.APIKey)
-		info, err := nowhere.GetInfo(temporaryID)
+		_, err := nowhere.GetInfo(temporaryID)
 		nowhere.GetCache().Delete(fmt.Sprintf("%d", temporaryID))
 		if err != nil {
 			result.Message = err.Error()
 		} else {
-			result.Version = info.Ver
 			result.CanImport = true
 			result.Status = "success"
 			result.Message = "OpenCtrl endpoint is reachable"

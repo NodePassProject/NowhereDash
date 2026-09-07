@@ -760,9 +760,9 @@ func (s *TunnelShared) copyTunnel(src *models.Tunnel) *models.Tunnel {
 		down := *src.Down
 		dst.Down = &down
 	}
-	if src.PoolSize != nil {
-		poolSize := *src.PoolSize
-		dst.PoolSize = &poolSize
+	if src.Mux != nil {
+		mux := *src.Mux
+		dst.Mux = &mux
 	}
 	if src.Sni != nil {
 		sni := *src.Sni

@@ -291,8 +291,8 @@ func (s *Service) queryAndBroadcastEndpointInfo(endpointID int64) {
 	} else {
 		info.Info = endpointInfo
 		memUsage := float64(endpointInfo.MemUsed) / float64(endpointInfo.MemTotal) * 100
-		log.Infof("成功获取Endpoint %d信息: %s %s v%s, CPU:%d核, 内存:%s/%s(%.1f%%), 运行时间:%s",
-			endpointID, endpointInfo.OS, endpointInfo.Arch, endpointInfo.Ver,
+		log.Infof("成功获取Endpoint %d信息: %s %s, CPU:%d核, 内存:%s/%s(%.1f%%), 运行时间:%s",
+			endpointID, endpointInfo.OS, endpointInfo.Arch,
 			endpointInfo.CPU,
 			formatBytes(endpointInfo.MemUsed),
 			formatBytes(endpointInfo.MemTotal),

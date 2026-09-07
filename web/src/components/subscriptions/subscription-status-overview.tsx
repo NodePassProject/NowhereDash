@@ -173,19 +173,20 @@ export function SubscriptionStatusOverview({
         : ("primary" as const);
 
     return (
-      <div className="mt-2 flex h-4 items-center gap-2">
+      <div className="mt-2.5 flex h-4 items-center gap-2.5">
         {hasLimit ? (
           <Progress
             aria-label={t("subscriptions.trafficUsage", {
               name: subscription.name,
             })}
             className="min-w-0 flex-1"
+            classNames={{ track: "bg-default-200/70" }}
             color={progressColor}
             size="sm"
             value={percentage}
           />
         ) : (
-          <div className="h-1 min-w-0 flex-1 rounded-full bg-default-100" />
+          <div className="h-1 min-w-0 flex-1 rounded-full bg-default-200/70" />
         )}
         <span className="shrink-0 text-[11px] tabular-nums text-default-500">
           {formatBytes(subscription.trafficUsed)}
@@ -205,6 +206,7 @@ export function SubscriptionStatusOverview({
       label: t("subscriptions.activeSummary"),
       icon: "lucide:circle-check",
       color: "text-success",
+      iconBackground: "bg-success/10",
     },
     {
       key: "attention",
@@ -212,6 +214,8 @@ export function SubscriptionStatusOverview({
       label: t("subscriptions.attentionSummary"),
       icon: "lucide:circle-alert",
       color: summary.attention > 0 ? "text-warning" : "text-default-400",
+      iconBackground:
+        summary.attention > 0 ? "bg-warning/10" : "bg-default-200/70",
     },
     {
       key: "portals",
@@ -219,6 +223,7 @@ export function SubscriptionStatusOverview({
       label: t("subscriptions.portalSummary"),
       icon: "lucide:waypoints",
       color: "text-primary",
+      iconBackground: "bg-primary/10",
     },
   ];
 
@@ -226,7 +231,7 @@ export function SubscriptionStatusOverview({
     <Card
       aria-labelledby="subscription-status-title"
       as="section"
-      className="h-[469px] border border-transparent dark:border-default-100"
+      className="h-[469px] border border-divider/60 bg-content1"
     >
       <CardBody className="flex min-h-0 flex-col p-5">
         <h2
@@ -238,22 +243,25 @@ export function SubscriptionStatusOverview({
 
         {loading ? (
           <div className="mt-3 flex min-h-0 flex-1 flex-col">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 overflow-hidden rounded-large bg-default-100/70">
               {[0, 1, 2].map((item) => (
                 <div
                   key={item}
-                  className="flex h-[82px] flex-col justify-center gap-2 rounded-lg bg-default-100/70 p-3 dark:bg-default-50"
+                  className="flex h-[88px] min-w-0 flex-col justify-between border-r border-divider/60 px-2.5 py-3 last:border-r-0 sm:px-3"
                 >
+                  <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="h-3 w-14 rounded-md" />
+                    <Skeleton className="hidden size-6 shrink-0 rounded-md sm:block" />
+                  </div>
                   <Skeleton className="h-6 w-10 rounded-md" />
-                  <Skeleton className="h-3 w-14 rounded-md" />
                 </div>
               ))}
             </div>
-            <div className="mt-3 space-y-2 overflow-hidden">
+            <div className="mt-3 overflow-hidden rounded-large bg-default-100/55 px-3.5">
               {[0, 1, 2].map((item) => (
                 <div
                   key={item}
-                  className="flex h-[96px] flex-col justify-center gap-2 rounded-lg border border-default-200/70 bg-content1 p-3 dark:border-default-100"
+                  className="flex h-[100px] flex-col justify-center gap-2 border-b border-divider/60 last:border-b-0"
                 >
                   <div className="flex justify-between gap-4">
                     <Skeleton className="h-4 w-28 rounded-md" />
@@ -266,12 +274,10 @@ export function SubscriptionStatusOverview({
             </div>
           </div>
         ) : loadFailed ? (
-          <div className="mt-3 flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg bg-default-100/60 text-center dark:bg-default-50">
-            <Icon
-              className="text-danger"
-              icon="lucide:circle-alert"
-              width={30}
-            />
+          <div className="mt-3 flex min-h-0 flex-1 flex-col items-center justify-center rounded-large bg-default-100/55 px-5 text-center">
+            <span className="flex size-11 items-center justify-center rounded-lg bg-danger/10 text-danger">
+              <Icon icon="lucide:circle-alert" width={22} />
+            </span>
             <p className="mt-3 text-sm font-medium">
               {t("subscriptions.loadFailed")}
             </p>
@@ -287,39 +293,39 @@ export function SubscriptionStatusOverview({
           </div>
         ) : (
           <div className="mt-3 flex min-h-0 flex-1 flex-col">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 overflow-hidden rounded-large bg-default-100/70">
               {summaryItems.map((item) => (
                 <div
                   key={item.key}
-                  className="flex h-[82px] flex-col justify-between rounded-lg bg-default-100/70 p-3 dark:bg-default-50"
+                  className="flex h-[88px] min-w-0 flex-col justify-between border-r border-divider/60 px-2.5 py-3 last:border-r-0 sm:px-3"
                 >
-                  <div className="flex items-start justify-between gap-1">
-                    <p
-                      className={`text-xl font-semibold leading-none tabular-nums ${item.color}`}
-                    >
-                      {item.value}
-                      {item.total != null && (
-                        <span className="ml-1 text-xs font-medium text-default-400">
-                          / {item.total}
-                        </span>
-                      )}
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <p className="line-clamp-2 min-w-0 text-[10px] font-medium leading-3 text-default-500 sm:text-[11px] sm:leading-4">
+                      {item.label}
                     </p>
-                    <Icon
-                      className={`shrink-0 ${item.color}`}
-                      icon={item.icon}
-                      width={16}
-                    />
+                    <span
+                      className={`hidden size-6 shrink-0 items-center justify-center rounded-md sm:flex ${item.iconBackground} ${item.color}`}
+                    >
+                      <Icon icon={item.icon} width={14} />
+                    </span>
                   </div>
-                  <p className="truncate text-[11px] text-default-500">
-                    {item.label}
+                  <p
+                    className={`flex items-end text-2xl font-semibold leading-none tabular-nums ${item.color}`}
+                  >
+                    {item.value}
+                    {item.total != null && (
+                      <span className="ml-1.5 pb-px text-xs font-medium leading-none text-default-400">
+                        / {item.total}
+                      </span>
+                    )}
                   </p>
                 </div>
               ))}
             </div>
 
             {subscriptions.length === 0 ? (
-              <div className="mt-3 flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg border border-default-200/70 px-4 text-center dark:border-default-100">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-50 text-primary dark:bg-primary-900/20">
+              <div className="mt-3 flex min-h-0 flex-1 flex-col items-center justify-center rounded-large bg-default-100/55 px-4 text-center">
+                <div className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Icon icon="lucide:rss" width={22} />
                 </div>
                 <p className="mt-3 text-sm font-medium">
@@ -339,45 +345,47 @@ export function SubscriptionStatusOverview({
                 </Button>
               </div>
             ) : (
-              <div className="scrollbar-hide mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
-                {sortedSubscriptions.map((subscription) => {
-                  const status = getStatus(subscription);
-                  const view = statusView(status);
+              <div className="scrollbar-hide mt-3 min-h-0 flex-1 overflow-y-auto">
+                <div className="overflow-hidden rounded-large bg-default-100/55 px-3.5">
+                  {sortedSubscriptions.map((subscription) => {
+                    const status = getStatus(subscription);
+                    const view = statusView(status);
 
-                  return (
-                    <article
-                      key={subscription.id}
-                      className="min-h-[96px] rounded-lg border border-default-200/70 bg-content1 p-3 dark:border-default-100"
-                    >
-                      <div className="flex min-w-0 items-center justify-between gap-3">
-                        <p className="min-w-0 truncate text-sm font-medium text-foreground">
-                          {subscription.name}
-                        </p>
-                        <Chip
-                          className="shrink-0"
-                          color={view.color}
-                          size="sm"
-                          startContent={<Icon icon={view.icon} width={13} />}
-                          variant="flat"
-                        >
-                          {view.label}
-                        </Chip>
-                      </div>
-                      <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-default-400">
-                        <span className="shrink-0">
-                          {t("subscriptions.portalCount", {
-                            count: subscription.portalCount,
-                          })}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span className="min-w-0 truncate">
-                          {formatExpiry(subscription.expiresAt)}
-                        </span>
-                      </div>
-                      {trafficView(subscription)}
-                    </article>
-                  );
-                })}
+                    return (
+                      <article
+                        key={subscription.id}
+                        className="min-h-[100px] border-b border-divider/60 py-3 last:border-b-0"
+                      >
+                        <div className="flex min-w-0 items-center justify-between gap-3">
+                          <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                            {subscription.name}
+                          </p>
+                          <Chip
+                            className="shrink-0"
+                            color={view.color}
+                            size="sm"
+                            startContent={<Icon icon={view.icon} width={13} />}
+                            variant="flat"
+                          >
+                            {view.label}
+                          </Chip>
+                        </div>
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-default-400">
+                          <span className="shrink-0">
+                            {t("subscriptions.portalCount", {
+                              count: subscription.portalCount,
+                            })}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span className="min-w-0 truncate">
+                            {formatExpiry(subscription.expiresAt)}
+                          </span>
+                        </div>
+                        {trafficView(subscription)}
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

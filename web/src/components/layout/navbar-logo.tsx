@@ -1,19 +1,58 @@
 import { NavbarBrand, Link, cn } from "@heroui/react";
-import { fontSans } from "@/config/fonts";
+
 import { UpdateChip } from "./update-chip";
 
-// Compact crop of the official Nowhere artwork.
-export const NowhereLogo = () => {
+import { fontSans } from "@/config/fonts";
+
+interface BrandProps {
+  className?: string;
+}
+
+interface LogoProps extends BrandProps {
+  alt?: string;
+}
+
+export const NowhereLogo = ({ alt = "NowhereDash", className }: LogoProps) => {
+  const logoClassName = cn("block h-8 w-8 shrink-0 object-contain", className);
+
+  return (
+    <>
+      <img
+        alt={alt}
+        className={cn(logoClassName, "dark:hidden")}
+        height={32}
+        src="/logo.png"
+        width={32}
+      />
+      <img
+        alt={alt}
+        className={cn(logoClassName, "hidden dark:block")}
+        height={32}
+        src="/logo-dark.png"
+        width={32}
+      />
+    </>
+  );
+};
+
+export const NowhereBrandLabel = ({ className }: BrandProps) => {
   return (
     <span
-      aria-label="Nowhere"
-      className="block h-8 w-8 shrink-0 rounded-md bg-left bg-no-repeat shadow-sm"
-      role="img"
-      style={{
-        backgroundImage: "url('/nowhere.png')",
-        backgroundSize: "700% 100%",
-      }}
-    />
+      aria-label="NowhereDash"
+      className={cn(
+        "whitespace-nowrap pl-1 font-bold text-foreground",
+        fontSans.className,
+        className,
+      )}
+    >
+      <span aria-hidden="true">Nowhere</span>
+      <span
+        aria-hidden="true"
+        className="bg-gradient-to-r from-[#0868f2] to-[#19aff4] bg-clip-text text-transparent"
+      >
+        Dash
+      </span>
+    </span>
   );
 };
 
@@ -25,9 +64,7 @@ export const NavbarLogo = () => {
     <NavbarBrand as="li" className="gap-1 max-w-fit items-center">
       <Link className="flex justify-start items-center" href="/">
         <NowhereLogo />
-        <p className={cn("font-bold text-foreground pl-1", fontSans.className)}>
-          NowhereDash
-        </p>
+        <NowhereBrandLabel />
       </Link>
       <UpdateChip />
     </NavbarBrand>

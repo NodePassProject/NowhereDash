@@ -1,92 +1,89 @@
 <div align="center">
-  <img src="../../web/public/nowhere.png" alt="NowhereDash" height="80">
+  <img src="../logo.png" alt="NowhereDash" width="720">
+
+  <h1>NowhereDash</h1>
+
+  <p><strong>专注于 Nowhere Portal 基础设施的统一控制面板。</strong></p>
+  <p>在一个面板中管理多个 OpenCtrl 端点、操作 Portal 实例、查看实时状态并发布私有订阅。</p>
+
+  <p>
+    <a href="../../LICENSE"><img src="https://img.shields.io/github/license/NodePassProject/NowhereDash" alt="许可证"></a>
+    <a href="https://github.com/NodePassProject/NowhereDash/releases"><img src="https://img.shields.io/github/v/release/NodePassProject/NowhereDash?include_prereleases" alt="版本"></a>
+    <a href="https://github.com/NodePassProject/NowhereDash/releases"><img src="https://img.shields.io/github/downloads/NodePassProject/NowhereDash/total.svg" alt="下载量"></a>
+    <a href="https://github.com/NodePassProject/NowhereDash/pkgs/container/nowheredash"><img src="https://img.shields.io/badge/docker-ghcr.io%2Fnodepassproject%2Fnowheredash-blue?logo=docker&logoColor=white" alt="Docker 镜像"></a>
+  </p>
+
+  <p>
+    <a href="#快速开始">快速开始</a> ·
+    <a href="#portal-订阅">Portal 订阅</a> ·
+    <a href="#文档">文档</a> ·
+    <a href="#开发构建">开发构建</a>
+  </p>
+
+  <p><a href="../../README.md">English</a> · <strong>简体中文</strong></p>
 </div>
 
-**语言:** [English](../../README.md) | 简体中文
+NowhereDash 以单个 Go 二进制发布，并内嵌 React 前端。后端采用 Gin、GORM 和 SQLite 或 PostgreSQL，Web 应用采用 Vite、TypeScript 与 HeroUI，运行状态通过 SSE 和 WebSocket 实时传递。
 
-![GitHub license](https://img.shields.io/github/license/NodePassProject/NowhereDash)
-![GitHub release](https://img.shields.io/github/v/release/NodePassProject/NowhereDash?include_prereleases)
-![GitHub downloads](https://img.shields.io/github/downloads/NodePassProject/NowhereDash/total.svg)
-![Docker image](https://img.shields.io/badge/docker-ghcr.io%2Fnodepassproject%2Fnowheredash-blue?logo=docker&logoColor=white)
+> [!IMPORTANT]
+> NowhereDash 仅管理 Nowhere Portal 实例。旧版 client/server 模式、服务组装功能和历史面板兼容字段均不再支持。
 
-NowhereDash 是一个通过 [OpenCtrl](https://github.com/NodePassProject/OpenCtrl) Master API 管理 [Nowhere](https://github.com/NodePassProject/Nowhere) Portal 实例的现代 Web 面板。它以单个 Go 二进制运行（Gin + GORM + SQLite/PostgreSQL），内嵌 React（Vite + TypeScript + HeroUI）前端，并通过 SSE/WebSocket 展示实时状态。
+## 能力概览
 
-本项目仅支持 Nowhere Portal。旧的 client/server 实例模式、服务组装功能和历史兼容字段均不再保留。
+| 领域                | NowhereDash 提供的能力                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| **Portal 生命周期** | 创建、编辑、启动、停止、重启、重命名、排序和监控 `portal://` 实例。                                 |
+| **OpenCtrl 端点**   | 在一个面板中管理多个 OpenCtrl `/api/v2` 端点。                                                      |
+| **完整编辑器**      | 配置网络模式、TLS、证书、ALPN、速率限制、拨号、SOCKS、Next Hop、载波、连接池、SNI、Pin 和日志级别。 |
+| **实时运维**        | 通过 SSE 和 WebSocket 展示状态、流量、连接数、延迟和日志。                                          |
+| **运维数据**        | 查看运行指标、清理历史数据，并在维护窗口执行 SQLite 停服压缩。                                      |
+| **托管订阅**        | 将运行中的 Portal 发布为 Token 鉴权订阅，支持到期时间、流量限制、预览和 Token 轮换。                |
+| **安全控制**        | 使用初始化向导、密码重置、OAuth2-only 登录、TLS 和订阅 Token 轮换。                                 |
+| **灵活部署**        | 使用 Docker、systemd 或单二进制运行，并可在浏览器中初始化 SQLite 或 PostgreSQL。                    |
+| **移动端工作流**    | 生成二维码、`nowhere://` URL 和 `anywhere://add-proxy` 导入链接。                                   |
 
-## 亮点
-
-- **Portal 专用管理**：创建、编辑、启动、停止、重启、重命名、排序和监控 `portal://` 实例。
-- **OpenCtrl 端点控制**：在一个面板内管理多个 OpenCtrl `/api/v2` 端点。
-- **完整 Portal 编辑器**：覆盖网络模式、TLS、证书、ALPN、速率限制、拨号、SOCKS、Next Hop、载波、连接池、SNI、Pin 和日志级别。
-- **Metadata 保留**：将 OpenCtrl `meta.tags` 与 `meta.peer` 独立于 Portal URL 保存。
-- **Portal 导入输出**：为每个 Portal 生成匹配的 `nowhere://` URL 与二维码。
-- **托管订阅**：将选定的运行中 Portal 发布为带 Token 鉴权的 `/sub/portal?token=...` 订阅。
-- **实时遥测**：通过 SSE 和 WebSocket 展示状态、流量、连接数、延迟与日志。
-- **流量与历史工具**：查看运行指标、清理历史数据，并在维护窗口执行 SQLite 停服压缩。
-- **便携运行**：支持 Docker、systemd 服务或单二进制运行，前端已嵌入后端。
-- **数据库可选**：首次启动通过 Web Setup 向导选择 SQLite 或 PostgreSQL。
-- **安全选项**：支持初始化向导、密码重置、OAuth2-only 登录、TLS 参数和订阅 Token 轮换。
-- **移动端友好**：提供二维码和 `anywhere://add-proxy`，便于导入 Anywhere。
+OpenCtrl Metadata 会被完整保留：`meta.tags` 和 `meta.peer` 独立于 Portal URL 存储。
 
 ## 快速开始
 
-使用 Docker 运行：
+运行最新容器：
 
 ```bash
-mkdir -p db logs && docker run -d --name nowheredash --restart unless-stopped -p 4000:4000 -v "$(pwd)/db:/app/db" -v "$(pwd)/logs:/app/logs" ghcr.io/nodepassproject/nowheredash:latest
+mkdir -p db logs
+
+docker run -d \
+  --name nowheredash \
+  --restart unless-stopped \
+  -p 4000:4000 \
+  -v "$(pwd)/db:/app/db" \
+  -v "$(pwd)/logs:/app/logs" \
+  ghcr.io/nodepassproject/nowheredash:latest
 ```
 
-然后打开 `http://localhost:4000`。
+打开 [http://localhost:4000](http://localhost:4000)。
 
-- **Docker：** [DOCKER.md](DOCKER.md)
-- **二进制 + systemd：** [BINARY.md](BINARY.md)
-- **开发环境：** [DEVELOPMENT.md](DEVELOPMENT.md)
+> [!TIP]
+> 首次启动时，Setup 向导会引导你选择 SQLite 或 PostgreSQL、确认合规声明并创建第一个管理员，最终配置会写入 `.env`；如果进程管理器不会自动重启，请在初始化完成后手动重启服务。
 
-首次启动时，如果没有数据库配置，NowhereDash 会进入 Setup 模式。打开 Web UI，选择 SQLite 或 PostgreSQL，确认合规声明，并创建第一个管理员。向导会写入 `.env`；如果你的进程管理器不会自动重启，请在初始化完成后手动重启服务。
-
-## 文档
-
-- **迁移指南：** [MIGRATION.md](MIGRATION.md)
-- **Docker 部署：** [DOCKER.md](DOCKER.md)
-- **二进制部署：** [BINARY.md](BINARY.md)
-- **开发环境：** [DEVELOPMENT.md](DEVELOPMENT.md)
-- **SQLite 停服压缩：** [SQLITE-MAINTENANCE.md](SQLITE-MAINTENANCE.md)
-
-## Portal 参数
-
-NowhereDash 管理当前 Nowhere Portal 参数：
-
-```text
-portal://<shared-key>@<listen-host>:<port>
-?net=mix|tcp|udp
-&tls=1|2
-&crt=...
-&key=...
-&alpn=...
-&rate=...
-&etar=...
-&dial=auto|IP
-&socks=none|endpoint
-&next=none|shared-key@host:port
-&up=tcp|udp
-&down=tcp|udp
-&pool=0..256
-&sni=...
-&pin=<小写 SHA-256>
-&log=none|debug|info|warn|error|event
-```
-
-`socks` 与 `next` 互斥。完整规则和默认值以 [Nowhere 官方配置文档](https://github.com/NodePassProject/Nowhere/blob/main/docs/configuration.md) 为准。
-
-生成 Vector URL 时，本地 SOCKS5 监听默认为 `127.0.0.1:1080`。如果 Portal 监听空地址或通配地址，NowhereDash 会使用 OpenCtrl 端点的 hostname 作为外部可达地址。
+| 安装方式         | 指南                       | 适用场景              |
+| ---------------- | -------------------------- | --------------------- |
+| Docker           | [Docker 部署](DOCKER.md)   | 容器环境与快速体验    |
+| 二进制 + systemd | [二进制部署](BINARY.md)    | 长期运行的 Linux 主机 |
+| 源码             | [开发环境](DEVELOPMENT.md) | 参与开发与自定义构建  |
 
 ## Portal 订阅
 
-订阅菜单可将选定的已有 Portal 发布到 `/sub/portal?token=...`。服务端会在每次拉取时根据当前运行中的 Portal 动态生成正文，正文包含一行或多行 `nowhere://` URL。Portal 导入与订阅使用统一的 URL scheme。
+订阅菜单可将选定的 Portal 发布为 `/sub/portal?token=...`。每次请求都会根据当前运行中的 Portal 状态实时生成内容，并返回一条或多条 `nowhere://` URL。
 
-订阅支持到期时间、流量上限、传输偏好、流量重置、正文预览、Token 轮换，以及通过 `anywhere://add-proxy` 一键导入 Anywhere。订阅 URL 属于 Bearer Secret，生产环境应使用 HTTPS，并在反向代理、CDN 与可观测性日志中隐藏 `token` 查询参数。
+订阅支持到期时间、流量上限、传输偏好、流量重置、正文预览、Token 轮换、明暗主题图标，以及通过 `anywhere://add-proxy` 一键导入 Anywhere。
 
-## 命令行参数
+> [!WARNING]
+> 订阅 URL 属于 Bearer Secret。生产环境应使用 HTTPS，并在反向代理、CDN 和可观测性日志中隐藏 `token` 查询参数。
+
+## 配置
+
+<details>
+<summary><strong>常用命令行参数</strong></summary>
 
 ```bash
 ./nowheredash --help
@@ -101,7 +98,16 @@ portal://<shared-key>@<listen-host>:<port>
 ./nowheredash --resetpwd
 ```
 
-常用环境变量包括 `PORT`、`LOG-LEVEL`、`TLS_CERT`、`TLS_KEY`、`DISABLE_LOGIN`、`SSE_DEBUG_LOG`、`DISABLE_SSE_LOG`、`DEMO_MODE`、`DB_DRIVER`、`DB_PATH`，以及 Setup 向导写入的 `PG_*` PostgreSQL 变量。
+</details>
+
+常用环境变量：
+
+| 分类     | 变量                                                      |
+| -------- | --------------------------------------------------------- |
+| 服务     | `PORT`、`LOG-LEVEL`、`TLS_CERT`、`TLS_KEY`                |
+| 身份验证 | `DISABLE_LOGIN`                                           |
+| 运行状态 | `SSE_DEBUG_LOG`、`DISABLE_SSE_LOG`、`DEMO_MODE`           |
+| 数据库   | `DB_DRIVER`、`DB_PATH`，以及 Setup 向导写入的 `PG_*` 变量 |
 
 ## 开发构建
 
@@ -113,41 +119,51 @@ corepack enable
 corepack prepare pnpm@10.23.0 --activate
 pnpm install --frozen-lockfile
 pnpm build
+
 cd ..
 go run ./cmd/server
 ```
 
-运行后端测试：
+运行测试和前端开发服务：
 
 ```bash
 go test ./...
-```
 
-启动前端开发服务：
-
-```bash
 cd web
 pnpm dev
 ```
 
+## 文档
+
+| 主题                  | 指南                                           |
+| --------------------- | ---------------------------------------------- |
+| Docker 部署           | [DOCKER.md](DOCKER.md)                         |
+| 二进制与 systemd 部署 | [BINARY.md](BINARY.md)                         |
+| 开发环境              | [DEVELOPMENT.md](DEVELOPMENT.md)               |
+| 迁移                  | [MIGRATION.md](MIGRATION.md)                   |
+| SQLite 停服压缩       | [SQLITE-MAINTENANCE.md](SQLITE-MAINTENANCE.md) |
+
 ## 数据兼容性
 
-NowhereDash 使用 Portal-only 数据模型和备份格式，不接受旧面板的隧道字段和服务记录。已有配置需要按 Nowhere Portal 重新创建，或导入 NowhereDash 的 Portal-only 备份。
+NowhereDash 使用 Portal-only 数据模型和备份格式。旧面板中的实例需要按 Nowhere Portal 重新创建，或导入 NowhereDash 的 Portal-only 备份。
 
-## 许可证
+## 许可证与支持
 
-[GNU General Public License v3.0](../../LICENSE)
+NowhereDash 使用 [GNU General Public License v3.0](../../LICENSE) 许可证。
 
-## 免责声明
+| 资源     | 链接                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------- |
+| Issues   | [NodePassProject/NowhereDash/issues](https://github.com/NodePassProject/NowhereDash/issues) |
+| Nowhere  | [NodePassProject/Nowhere](https://github.com/NodePassProject/Nowhere)                       |
+| OpenCtrl | [NodePassProject/OpenCtrl](https://github.com/NodePassProject/OpenCtrl)                     |
+
+<details>
+<summary><strong>免责声明</strong></summary>
 
 本项目按“现状”提供，不附带任何明示或暗示担保。使用者需自行遵守所在地法律法规，并仅将其用于合法用途。作者不对任何直接、间接、偶发或后果性损失承担责任，并保留随时调整功能和声明的权利。
 
-## 支持
+</details>
 
-- Issues: https://github.com/NodePassProject/NowhereDash/issues
-- Nowhere: https://github.com/NodePassProject/Nowhere
-- OpenCtrl: https://github.com/NodePassProject/OpenCtrl
-
----
-
-Copyright 2026 NodePassProject.
+<div align="center">
+  <sub>Copyright 2026 NodePassProject.</sub>
+</div>

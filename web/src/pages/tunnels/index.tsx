@@ -65,7 +65,6 @@ interface PortalTunnel {
   endpoint?: string | EndpointSummary;
   endpointId: string | number;
   endpointName?: string;
-  endpointVersion?: string;
   status: "running" | "stopped" | "error" | "offline";
   listenHost: string;
   listenPort: string | number;
@@ -88,6 +87,40 @@ interface PortalTunnel {
 }
 
 type PortalAction = "start" | "stop" | "restart";
+
+function TunnelTableLoadingSkeleton({ label }: { label: string }) {
+  return (
+    <div aria-label={label} className="w-full space-y-2" role="status">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div
+          key={index}
+          aria-hidden="true"
+          className="grid h-10 grid-cols-[20px_1.4fr_1fr_1fr_1.1fr_.9fr_.6fr_.6fr_1.2fr_.8fr_.9fr_1.4fr] items-center gap-5"
+        >
+          <Skeleton className="size-5 rounded-md" />
+          <Skeleton className="h-4 w-full max-w-32 rounded-md" />
+          <Skeleton className="h-3 w-full max-w-20 rounded-md" />
+          <Skeleton className="h-4 w-full max-w-24 rounded-md" />
+          <Skeleton className="h-4 w-full max-w-28 rounded-md" />
+          <Skeleton className="h-4 w-full max-w-20 rounded-md" />
+          <Skeleton className="h-4 w-full max-w-12 rounded-md" />
+          <Skeleton className="h-4 w-full max-w-12 rounded-md" />
+          <Skeleton className="h-6 w-full max-w-28 rounded-md" />
+          <Skeleton className="h-6 w-full max-w-16 rounded-full" />
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-full max-w-16 rounded-md" />
+            <Skeleton className="h-3 w-full max-w-14 rounded-md" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Skeleton className="size-8 rounded-md" />
+            <Skeleton className="size-8 rounded-md" />
+            <Skeleton className="size-8 rounded-md" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const formatBytes = (bytes = 0) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -390,6 +423,8 @@ export default function TunnelsPage() {
 
     return tunnels.filter((tunnel) => selected.has(String(tunnel.id)));
   }, [selectedKeys, tunnels]);
+
+  const showTableSkeleton = loading && tunnels.length === 0;
 
   const selectedCount = useMemo(() => {
     if (selectedKeys === "all") return tunnels.length;
@@ -998,7 +1033,6 @@ export default function TunnelsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Divider className="hidden h-5 xl:block" orientation="vertical" />
           <Dropdown placement="bottom-end">
             <DropdownTrigger>
               <Button
@@ -1082,58 +1116,61 @@ export default function TunnelsPage() {
             <span className="hidden sm:inline">{copy.refresh}</span>
           </Button>
           {selectedCount > 0 && (
-            <Dropdown placement="bottom-end">
-              <DropdownTrigger>
-                <Button size="sm" variant="flat">
-                  {copy.selected} {selectedCount}
-                  <Icon icon="lucide:chevron-down" width={14} />
-                </Button>
-              </DropdownTrigger>
-              <DropdownMenu
-                aria-label={copy.bulkActions}
-                onAction={(key) => {
-                  if (key === "export") setExportOpen(true);
-                  else if (key === "delete") setBatchDeleteOpen(true);
-                  else void runBatchAction(key as PortalAction);
-                }}
-              >
-                <DropdownItem
-                  key="start"
-                  className="text-success"
-                  startContent={<Icon icon="lucide:play" width={16} />}
+            <>
+              <Divider className="hidden h-5 xl:block" orientation="vertical" />
+              <Dropdown placement="bottom-end">
+                <DropdownTrigger>
+                  <Button size="sm" variant="flat">
+                    {copy.selected} {selectedCount}
+                    <Icon icon="lucide:chevron-down" width={14} />
+                  </Button>
+                </DropdownTrigger>
+                <DropdownMenu
+                  aria-label={copy.bulkActions}
+                  onAction={(key) => {
+                    if (key === "export") setExportOpen(true);
+                    else if (key === "delete") setBatchDeleteOpen(true);
+                    else void runBatchAction(key as PortalAction);
+                  }}
                 >
-                  {copy.bulkStart}
-                </DropdownItem>
-                <DropdownItem
-                  key="stop"
-                  className="text-warning"
-                  startContent={<Icon icon="lucide:square" width={16} />}
-                >
-                  {copy.bulkStop}
-                </DropdownItem>
-                <DropdownItem
-                  key="restart"
-                  className="text-secondary"
-                  startContent={<Icon icon="lucide:rotate-cw" width={16} />}
-                >
-                  {copy.bulkRestart}
-                </DropdownItem>
-                <DropdownItem
-                  key="export"
-                  startContent={<Icon icon="lucide:download" width={16} />}
-                >
-                  {copy.bulkExport}
-                </DropdownItem>
-                <DropdownItem
-                  key="delete"
-                  className="text-danger"
-                  color="danger"
-                  startContent={<Icon icon="lucide:trash-2" width={16} />}
-                >
-                  {copy.bulkDelete}
-                </DropdownItem>
-              </DropdownMenu>
-            </Dropdown>
+                  <DropdownItem
+                    key="start"
+                    className="text-success"
+                    startContent={<Icon icon="lucide:play" width={16} />}
+                  >
+                    {copy.bulkStart}
+                  </DropdownItem>
+                  <DropdownItem
+                    key="stop"
+                    className="text-warning"
+                    startContent={<Icon icon="lucide:square" width={16} />}
+                  >
+                    {copy.bulkStop}
+                  </DropdownItem>
+                  <DropdownItem
+                    key="restart"
+                    className="text-secondary"
+                    startContent={<Icon icon="lucide:rotate-cw" width={16} />}
+                  >
+                    {copy.bulkRestart}
+                  </DropdownItem>
+                  <DropdownItem
+                    key="export"
+                    startContent={<Icon icon="lucide:download" width={16} />}
+                  >
+                    {copy.bulkExport}
+                  </DropdownItem>
+                  <DropdownItem
+                    key="delete"
+                    className="text-danger"
+                    color="danger"
+                    startContent={<Icon icon="lucide:trash-2" width={16} />}
+                  >
+                    {copy.bulkDelete}
+                  </DropdownItem>
+                </DropdownMenu>
+              </Dropdown>
+            </>
           )}
           <Select
             aria-label={copy.rows}
@@ -1167,10 +1204,15 @@ export default function TunnelsPage() {
         <CardBody className="gap-4 p-4">
           {groupFilter}
 
-          <div className="hidden overflow-x-auto md:block [&_td:first-child]:!w-10 [&_td:first-child]:!max-w-10 [&_th:first-child]:!w-10 [&_th:first-child]:!max-w-10">
+          <div className="hidden overflow-x-auto md:block [&_th:first-child]:!w-10 [&_th:first-child]:!max-w-10">
             <Table
               removeWrapper
+              aria-busy={loading}
               aria-label={copy.title}
+              classNames={{
+                loadingWrapper:
+                  "!top-11 !w-full !max-w-none items-start bg-content1 px-3 py-2",
+              }}
               selectedKeys={selectedKeys}
               selectionMode="multiple"
               sortDescriptor={sortDescriptor}
@@ -1249,9 +1291,11 @@ export default function TunnelsPage() {
                     )}
                   </div>
                 }
-                isLoading={loading}
+                isLoading={showTableSkeleton}
                 items={tunnels}
-                loadingContent={<Spinner label={copy.loading} />}
+                loadingContent={
+                  <TunnelTableLoadingSkeleton label={copy.loading} />
+                }
               >
                 {(tunnel) => (
                   <TableRow
@@ -1286,13 +1330,7 @@ export default function TunnelsPage() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <Tooltip
-                        content={
-                          tunnel.endpointVersion
-                            ? `${getEndpointName(tunnel)} · ${tunnel.endpointVersion}`
-                            : getEndpointName(tunnel)
-                        }
-                      >
+                      <Tooltip content={getEndpointName(tunnel)}>
                         <span className="block max-w-40 truncate text-sm text-default-600">
                           {getEndpointName(tunnel)}
                         </span>
@@ -1342,7 +1380,7 @@ export default function TunnelsPage() {
           </div>
 
           <div className="grid gap-3 md:hidden">
-            {loading ? (
+            {showTableSkeleton ? (
               Array.from({ length: 4 }).map((_, index) => (
                 <div
                   key={index}

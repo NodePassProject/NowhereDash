@@ -16,6 +16,8 @@ import {
   ModalFooter,
   Textarea,
   Input,
+  Tab,
+  Tabs,
   useDisclosure,
 } from "@heroui/react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -47,6 +49,7 @@ import {
   faDownload,
   faUpload,
   faFileImport,
+  faTerminal,
 } from "@fortawesome/free-solid-svg-icons";
 import { Icon } from "@iconify/react/dist/offline";
 import { useNavigate } from "react-router-dom";
@@ -63,6 +66,14 @@ import { OSIcon } from "@/components/ui/os-icon";
 import { useSettings } from "@/components/providers/settings-provider";
 import SystemStatsCharts from "@/components/ui/system-stats-charts";
 import NetworkDebugModal from "@/components/ui/network-debug-modal";
+import { copyToClipboard } from "@/lib/utils/clipboard";
+
+const INSTALLER_BASE_URL =
+  "https://raw.githubusercontent.com/NodePassProject/NowhereDash/main/scripts";
+const UNIX_UNINSTALL_COMMAND = `curl -fsSL '${INSTALLER_BASE_URL}/install.sh' -o '/tmp/nowheredash-install.sh' && sudo bash '/tmp/nowheredash-install.sh' uninstall nowhere --yes`;
+const WINDOWS_UNINSTALL_COMMAND = `Invoke-WebRequest -UseBasicParsing '${INSTALLER_BASE_URL}/install.ps1' -OutFile "$env:TEMP\\nowheredash-install.ps1"; powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:TEMP\\nowheredash-install.ps1" uninstall nowhere -Yes`;
+
+type UninstallPlatform = "unix" | "windows";
 
 // 主控详情接口定义
 interface EndpointDetail {
@@ -76,7 +87,6 @@ interface EndpointDetail {
   color?: string;
   os?: string;
   arch?: string;
-  ver?: string;
   log?: string;
   tls?: string;
   crt?: string;
@@ -185,6 +195,13 @@ export default function EndpointDetailPage() {
     onOpen: onDeleteEndpointOpen,
     onOpenChange: onDeleteEndpointOpenChange,
   } = useDisclosure();
+  const {
+    isOpen: isUninstallCommandOpen,
+    onOpen: onUninstallCommandOpen,
+    onOpenChange: onUninstallCommandOpenChange,
+  } = useDisclosure();
+  const [uninstallPlatform, setUninstallPlatform] =
+    useState<UninstallPlatform>("unix");
   const {
     isOpen: isClearLogsOpen,
     onOpen: onClearLogsOpen,
@@ -585,6 +602,25 @@ export default function EndpointDetailPage() {
         color: "success",
       });
     });
+  };
+
+  const handleOpenUninstallCommand = () => {
+    const detectedOs = endpointDetail?.os?.toLowerCase() || "";
+
+    setUninstallPlatform(detectedOs.includes("windows") ? "windows" : "unix");
+    onUninstallCommandOpen();
+  };
+
+  const uninstallCommand =
+    uninstallPlatform === "windows"
+      ? WINDOWS_UNINSTALL_COMMAND
+      : UNIX_UNINSTALL_COMMAND;
+
+  const handleCopyUninstallCommand = () => {
+    void copyToClipboard(
+      uninstallCommand,
+      t("details.modals.uninstallCommand.copied"),
+    );
   };
 
   const handleResetApiKey = async () => {
@@ -1279,11 +1315,6 @@ export default function EndpointDetailPage() {
               <h1 className="text-lg md:text-2xl font-bold truncate max-w-[200px] md:max-w-none">
                 {endpointDetail.name}
               </h1>
-              {endpointDetail.ver && (
-                <Chip color="secondary" variant="flat">
-                  {endpointDetail.ver}
-                </Chip>
-              )}
               <Chip
                 color={
                   endpointDetail.status === "ONLINE"
@@ -1353,11 +1384,10 @@ export default function EndpointDetailPage() {
         </div>
       </div>
 
-      {/* 系统监控统计图 - 仅在实验模式下显示 */}
+      {/* 系统监控统计图 */}
       <SystemStatsCharts
         endpointId={endpointId ? parseInt(endpointId) : null}
         endpointOS={endpointDetail?.os || null}
-        endpointVersion={endpointDetail?.ver || null}
       />
 
       {/* 统计信息卡片 */}
@@ -1610,14 +1640,24 @@ export default function EndpointDetailPage() {
                   <p className="text-tiny text-default-500">
                     {t("details.actions.dangerHint")}
                   </p>
-                  <Button
-                    color="danger"
-                    startContent={<FontAwesomeIcon icon={faTrash} />}
-                    variant="flat"
-                    onPress={onDeleteEndpointOpen}
-                  >
-                    {t("details.actions.delete")}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <Button
+                      color="danger"
+                      startContent={<FontAwesomeIcon icon={faTerminal} />}
+                      variant="bordered"
+                      onPress={handleOpenUninstallCommand}
+                    >
+                      {t("details.actions.uninstall")}
+                    </Button>
+                    <Button
+                      color="danger"
+                      startContent={<FontAwesomeIcon icon={faTrash} />}
+                      variant="flat"
+                      onPress={onDeleteEndpointOpen}
+                    >
+                      {t("details.actions.delete")}
+                    </Button>
+                  </div>
                 </div>
               </section>
             </div>
@@ -2556,6 +2596,90 @@ export default function EndpointDetailPage() {
                   onPress={handleClearLogs}
                 >
                   {t("details.modals.clearLogs.confirm")}
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      {/* 节点卸载命令模态框 */}
+      <Modal
+        isOpen={isUninstallCommandOpen}
+        placement="center"
+        scrollBehavior="inside"
+        size="2xl"
+        onOpenChange={onUninstallCommandOpenChange}
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader className="flex items-center gap-2">
+                <FontAwesomeIcon className="text-danger" icon={faTerminal} />
+                <span>{t("details.modals.uninstallCommand.title")}</span>
+              </ModalHeader>
+              <ModalBody className="gap-4">
+                <div className="rounded-lg border border-danger/25 bg-danger/[0.05] px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-danger">
+                      {endpointDetail?.name}
+                    </span>
+                    {endpointDetail?.os && (
+                      <Chip color="danger" size="sm" variant="flat">
+                        {endpointDetail.os}
+                      </Chip>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-default-600">
+                    {t("details.modals.uninstallCommand.warning")}
+                  </p>
+                </div>
+
+                <Tabs
+                  aria-label={t(
+                    "details.modals.uninstallCommand.platformLabel",
+                  )}
+                  color="danger"
+                  selectedKey={uninstallPlatform}
+                  variant="underlined"
+                  onSelectionChange={(key) =>
+                    setUninstallPlatform(key as UninstallPlatform)
+                  }
+                >
+                  <Tab
+                    key="unix"
+                    title={t("details.modals.uninstallCommand.unix")}
+                  />
+                  <Tab
+                    key="windows"
+                    title={t("details.modals.uninstallCommand.windows")}
+                  />
+                </Tabs>
+
+                <div className="overflow-hidden rounded-lg border border-divider bg-content2">
+                  <div className="flex items-center justify-between border-b border-divider px-3 py-2">
+                    <span className="text-tiny font-medium uppercase text-default-500">
+                      {t("details.modals.uninstallCommand.commandLabel")}
+                    </span>
+                    <span className="font-mono text-tiny text-default-400">
+                      {uninstallPlatform === "windows" ? "PowerShell" : "Bash"}
+                    </span>
+                  </div>
+                  <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-all px-4 py-3 font-mono text-xs leading-6 text-foreground select-all">
+                    {uninstallCommand}
+                  </pre>
+                </div>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose}>
+                  {t("details.modals.uninstallCommand.cancel")}
+                </Button>
+                <Button
+                  color="danger"
+                  startContent={<FontAwesomeIcon icon={faCopy} />}
+                  onPress={handleCopyUninstallCommand}
+                >
+                  {t("details.modals.uninstallCommand.copy")}
                 </Button>
               </ModalFooter>
             </>

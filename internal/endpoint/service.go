@@ -61,8 +61,15 @@ func (s *Service) GetEndpoints() ([]EndpointWithStats, error) {
 	if endpoints == nil {
 		endpoints = []EndpointWithStats{}
 	}
+	for index := range endpoints {
+		setEndpointCapabilities(&endpoints[index].Endpoint)
+	}
 
 	return endpoints, nil
+}
+
+func setEndpointCapabilities(item *models.Endpoint) {
+	item.SupportsSystemMonitor = item.Ver != nil && nowhere.VersionAtLeast(*item.Ver, "1.6.0")
 }
 
 // ExtractHostFromURL extracts the host name or IP address from an endpoint URL.
@@ -355,6 +362,7 @@ func (s *Service) UpdateEndpoint(req UpdateEndpointRequest) (*Endpoint, error) {
 		nowhere.GetCache().Update(fmt.Sprintf("%d", endpoint.ID), nowhere.BuildAPIBaseURL(endpoint.URL, endpoint.APIPath), endpoint.APIKey)
 	}
 
+	setEndpointCapabilities(&endpoint)
 	return &endpoint, nil
 }
 
@@ -472,6 +480,7 @@ func (s *Service) GetEndpointByID(id int64) (*Endpoint, error) {
 		}
 		return nil, err
 	}
+	setEndpointCapabilities(&endpoint)
 	return &endpoint, nil
 }
 
@@ -483,7 +492,6 @@ type SimpleEndpoint struct {
 	APIPath     string         `json:"apiPath"`
 	Status      EndpointStatus `json:"status"`
 	TunnelCount int            `json:"tunnelCount"`
-	Ver         string         `json:"version"`
 	TLS         string         `json:"tls"`
 	Log         string         `json:"log"`
 	Crt         string         `json:"crt"`
@@ -494,7 +502,7 @@ type SimpleEndpoint struct {
 // GetSimpleEndpoints 获取简化端点列表，可排除 FAIL
 func (s *Service) GetSimpleEndpoints(excludeFail bool) ([]SimpleEndpoint, error) {
 	query := s.db.Table("endpoints e").
-		Select("e.id, e.name, e.hostname as url, e.api_path, e.status,  e.tunnel_count, e.ver, e.tls, e.log, e.crt, e.key_path, e.uptime")
+		Select("e.id, e.name, e.hostname as url, e.api_path, e.status, e.tunnel_count, e.tls, e.log, e.crt, e.key_path, e.uptime")
 
 	if excludeFail {
 		query = query.Where("e.status NOT IN ('FAIL', 'DISCONNECT')")

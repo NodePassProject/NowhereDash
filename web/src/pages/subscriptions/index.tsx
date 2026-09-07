@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import SubscriptionFormModal from "@/components/subscriptions/subscription-form-modal";
+import { SubscriptionIcon } from "@/components/subscriptions/subscription-icon";
 import SubscriptionImportModal from "@/components/subscriptions/subscription-import-modal";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import {
@@ -407,7 +408,6 @@ export default function SubscriptionsPage() {
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Divider className="hidden h-5 xl:block" orientation="vertical" />
           <Button
             size="sm"
             startContent={<Icon icon="lucide:calendar-x" width={15} />}
@@ -488,10 +488,10 @@ export default function SubscriptionsPage() {
                     <TableRow key={String(subscription.id)}>
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-2.5">
-                          <img
+                          <SubscriptionIcon
                             alt=""
-                            className="size-8 shrink-0 rounded-lg border border-default-200 bg-content1 object-cover shadow-small"
-                            src={subscription.icon || "/nowhere-icon.png"}
+                            className="size-8 shrink-0 rounded-lg border border-default-200 bg-content1 shadow-small"
+                            icon={subscription.icon}
                           />
                           <p className="max-w-52 truncate font-medium">
                             {subscription.name}
@@ -566,10 +566,10 @@ export default function SubscriptionsPage() {
                     className="w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-default-200 p-4"
                   >
                     <div className="flex items-start gap-3">
-                      <img
+                      <SubscriptionIcon
                         alt=""
-                        className="size-10 shrink-0 rounded-lg border border-default-200 bg-content1 object-cover shadow-small"
-                        src={subscription.icon || "/nowhere-icon.png"}
+                        className="size-10 shrink-0 rounded-lg border border-default-200 bg-content1 shadow-small"
+                        icon={subscription.icon}
                       />
                       <div className="min-w-0">
                         <p className="truncate font-medium">

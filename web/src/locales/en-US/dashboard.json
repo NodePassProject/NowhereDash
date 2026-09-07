@@ -36,7 +36,7 @@
     "loadFailed": "Failed to load subscription status",
     "retry": "Retry",
     "emptyTitle": "No subscriptions yet",
-    "emptyHint": "Create one to track expiry and traffic from the dashboard.",
+    "emptyHint": "Track expiry and traffic.",
     "create": "Create subscription",
     "status": {
       "active": "Active",

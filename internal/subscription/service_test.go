@@ -12,6 +12,7 @@ import (
 	"image/draw"
 	"image/png"
 	standardlog "log"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -227,8 +228,11 @@ func TestRenderPublicProducesNowhereLinesAndPhysicalPortalCount(t *testing.T) {
 	if len(lines) != 8 {
 		t.Fatalf("credential line count = %d, want 8 base + IPv6 variants: %q", len(lines), rendered.Content)
 	}
-	if strings.Count(rendered.Content, "pool=5") != 2 {
-		t.Fatalf("pool=5 count is not limited to TCP/TCP: %q", rendered.Content)
+	if strings.Count(rendered.Content, "mux=1") != 6 {
+		t.Fatalf("mux=1 count is not limited to routes with a TLS carrier: %q", rendered.Content)
+	}
+	if strings.Contains(rendered.Content, "pool=") {
+		t.Fatalf("legacy pool parameter is still present: %q", rendered.Content)
 	}
 	for _, expected := range []string{
 		"nowhere://key%3A%2F%40@api.example:20001",
@@ -244,9 +248,13 @@ func TestRenderPublicProducesNowhereLinesAndPhysicalPortalCount(t *testing.T) {
 	if got := rendered.Headers["profile-title"]; got != "base64:Tm93aGVyZSBTRw==" {
 		t.Fatalf("profile-title = %q", got)
 	}
-	for _, header := range []string{"aw-icon-light", "aw-icon-dark"} {
+	defaultIcons := map[string][]byte{
+		"aw-icon-light": defaultSubscriptionIconLightPNG,
+		"aw-icon-dark":  defaultSubscriptionIconDarkPNG,
+	}
+	for header, expectedIcon := range defaultIcons {
 		decoded, decodeErr := base64.StdEncoding.DecodeString(rendered.Headers[header])
-		if decodeErr != nil || !bytes.Equal(decoded, defaultSubscriptionIconPNG) {
+		if decodeErr != nil || !bytes.Equal(decoded, expectedIcon) {
 			t.Fatalf("%s does not contain the embedded Nowhere logo", header)
 		}
 	}
@@ -274,9 +282,11 @@ func TestSubscriptionIconUploadPreserveAndReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render subscription with icon: %v", err)
 	}
-	decodedHeader, err := base64.StdEncoding.DecodeString(rendered.Headers["aw-icon-light"])
-	if err != nil || !bytes.Equal(decodedHeader, iconBytes) {
-		t.Fatal("public subscription header does not contain the uploaded icon")
+	for _, header := range []string{"aw-icon-light", "aw-icon-dark"} {
+		decodedHeader, decodeErr := base64.StdEncoding.DecodeString(rendered.Headers[header])
+		if decodeErr != nil || !bytes.Equal(decodedHeader, iconBytes) {
+			t.Fatalf("%s does not contain the uploaded icon", header)
+		}
 	}
 
 	updated, err := service.Update(created.ID, UpsertRequest{
@@ -296,15 +306,15 @@ func TestSubscriptionIconUploadPreserveAndReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reset subscription icon: %v", err)
 	}
-	if reset.Icon != "/nowhere-icon.png" {
+	if reset.Icon != "/logo.png" {
 		t.Fatalf("reset icon = %q, want default icon URL", reset.Icon)
 	}
 	rendered, err = service.RenderPublic(created.Token)
 	if err != nil {
 		t.Fatalf("render reset subscription: %v", err)
 	}
-	decodedHeader, err = base64.StdEncoding.DecodeString(rendered.Headers["aw-icon-dark"])
-	if err != nil || !bytes.Equal(decodedHeader, defaultSubscriptionIconPNG) {
+	decodedHeader, decodeErr := base64.StdEncoding.DecodeString(rendered.Headers["aw-icon-dark"])
+	if decodeErr != nil || !bytes.Equal(decodedHeader, defaultSubscriptionIconDarkPNG) {
 		t.Fatal("reset subscription header does not contain the default icon")
 	}
 }
@@ -460,5 +470,56 @@ func TestSubscriptionCRUDPreviewRotateResetAndDelete(t *testing.T) {
 	}
 	if _, err := service.Get(created.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get deleted error = %v", err)
+	}
+}
+
+func TestDeleteDoesNotUpgradeAStaleSQLiteReadSnapshot(t *testing.T) {
+	dsn := filepath.Join(t.TempDir(), "subscriptions.db") +
+		"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(1000)"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql database: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(2)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.AutoMigrate(&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+
+	service := NewService(db)
+	created, err := service.Create(UpsertRequest{Name: "delete under contention"})
+	if err != nil {
+		t.Fatalf("create subscription: %v", err)
+	}
+
+	competingWriteRan := false
+	callbackName := "test:commit-competing-write-before-delete"
+	if err := db.Callback().Delete().Before("gorm:delete").Register(callbackName, func(tx *gorm.DB) {
+		if competingWriteRan || tx.Statement.Table != (models.PortalSubscriptionTunnel{}).TableName() {
+			return
+		}
+		competingWriteRan = true
+		if writeErr := db.Model(&models.PortalSubscription{}).
+			Where("id = ?", created.ID).
+			Update("profile_title", "written concurrently").Error; writeErr != nil {
+			t.Errorf("commit competing write: %v", writeErr)
+		}
+	}); err != nil {
+		t.Fatalf("register delete callback: %v", err)
+	}
+	t.Cleanup(func() { db.Callback().Delete().Remove(callbackName) })
+
+	if err := service.Delete(created.ID); err != nil {
+		t.Fatalf("delete subscription after competing WAL commit: %v", err)
+	}
+	if !competingWriteRan {
+		t.Fatal("competing write callback did not run")
+	}
+	if err := service.Delete(created.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("delete missing subscription error = %v, want ErrNotFound", err)
 	}
 }

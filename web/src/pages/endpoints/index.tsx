@@ -116,7 +116,6 @@ interface FormattedEndpoint extends EndpointWithRelations {
   updatedAt: Date;
   lastCheck: Date;
   lastResponse: string | null;
-  ver?: string; // 添加版本字段
 }
 
 interface EndpointFormData {
@@ -181,28 +180,11 @@ function SortableTableRow({
         {result.url}
         {result.apiPath}
       </td>
-      <td className="px-3 py-3 text-small">
-        <span
-          className={`font-mono ${
-            result.status === "success"
-              ? "text-success"
-              : result.status === "low_version"
-                ? "text-warning"
-                : "text-danger"
-          }`}
-        >
-          {result.version}
-        </span>
-      </td>
       <td className="px-3 py-3">
         <div className="flex flex-col gap-1">
           <span
             className={`text-xs ${
-              result.status === "success"
-                ? "text-success"
-                : result.status === "low_version"
-                  ? "text-warning"
-                  : "text-danger"
+              result.status === "success" ? "text-success" : "text-danger"
             }`}
           >
             {result.canImport
@@ -221,12 +203,6 @@ export default function EndpointsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // 检测是否是 beta 版本
-  const isBetaVersion = (ver?: string) => {
-    if (!ver) return false;
-    return /-b\d+/i.test(ver);
-  };
 
   // 组件挂载状态管理和定时器清理
   const isMountedRef = useRef(true);
@@ -1697,38 +1673,12 @@ export default function EndpointsPage() {
                         {endpoint.name}
                       </h2>
                     )}
-                    {endpoint.name.length < 10 && endpoint.ver && (
-                      <Chip
-                        className="text-xs"
-                        size="sm"
-                        variant="flat"
-                        color={
-                          isBetaVersion(endpoint.ver) ? "primary" : undefined
-                        }
-                      >
-                        {endpoint.ver}
-                      </Chip>
-                    )}
                     {endpoint.name.length >= 10 && (
                       <h2
                         className={`leading-tight cursor-help overflow-hidden max-h-[2.5em] bg-gradient-to-br from-foreground-800 to-foreground-500 bg-clip-text text-xl font-semibold tracking-tight text-transparent dark:to-foreground-200`}
                         style={{ wordBreak: "break-all" }}
                       >
                         {endpoint.name}
-                        {endpoint.ver && (
-                          <Chip
-                            className="text-xs cursor-pointer ml-1 align-middle"
-                            size="sm"
-                            variant="flat"
-                            color={
-                              isBetaVersion(endpoint.ver)
-                                ? "primary"
-                                : undefined
-                            }
-                          >
-                            {endpoint.ver}
-                          </Chip>
-                        )}
                       </h2>
                     )}
                   </div>
@@ -1812,9 +1762,6 @@ export default function EndpointsPage() {
             <TableColumn allowsSorting key="name" className="min-w-[140px]">
               {t("table.columns.name")}
             </TableColumn>
-            <TableColumn key="version" className="w-24">
-              {t("table.columns.version")}
-            </TableColumn>
             <TableColumn allowsSorting key="url" className="min-w-[200px]">
               {t("table.columns.url")}
             </TableColumn>
@@ -1829,12 +1776,12 @@ export default function EndpointsPage() {
             {endpoints.length === 0 ? (
               <>
                 <TableRow>
-                  <TableCell className="text-center py-4" colSpan={6}>
+                  <TableCell className="text-center py-4" colSpan={5}>
                     {t("page.noData")}
                   </TableCell>
                 </TableRow>
                 <TableRow key="add-row-empty">
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     <Button
                       className="w-full border-2 border-dashed border-default-300 hover:border-primary"
                       variant="light"
@@ -1896,16 +1843,6 @@ export default function EndpointsPage() {
                             />
                           </Tooltip>
                         </div>
-                      </TableCell>
-                      <TableCell className="w-32">
-                        <Chip
-                          className="text-xs"
-                          size="sm"
-                          variant="flat"
-                          color={isBetaVersion(ep.ver) ? "primary" : undefined}
-                        >
-                          {ep.ver ? ep.ver : "unknown"}
-                        </Chip>
                       </TableCell>
                       <TableCell className="truncate min-w-[200px]">
                         {formatUrl(ep.url, ep.apiPath)}
@@ -2038,7 +1975,7 @@ export default function EndpointsPage() {
                 })}
                 {/* 添加主控行 */}
                 <TableRow key="add-row">
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     <Button
                       className="w-full border-2 border-dashed border-default-300 hover:border-primary"
                       variant="light"
@@ -2337,9 +2274,6 @@ export default function EndpointsPage() {
                             </th>
                             <th className="text-left px-3 py-2 text-small font-semibold">
                               {t("importModal.validateColumns.url")}
-                            </th>
-                            <th className="text-left px-3 py-2 text-small font-semibold">
-                              {t("importModal.validateColumns.version")}
                             </th>
                             <th className="text-left px-3 py-2 text-small font-semibold">
                               {t("importModal.validateColumns.status")}

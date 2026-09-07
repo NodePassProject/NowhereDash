@@ -30,7 +30,7 @@ type TunnelConfig struct {
 	Next       string `json:"next"`
 	Up         string `json:"up"`
 	Down       string `json:"down"`
-	PoolSize   string `json:"poolSize"`
+	Mux        string `json:"mux"`
 	Sni        string `json:"sni"`
 	Pin        string `json:"pin"`
 	LogLevel   string `json:"logLevel"`
@@ -87,7 +87,7 @@ func normalizePortalHost(host string) string {
 var portalEffectiveQueryKeys = map[string]struct{}{
 	"net": {}, "tls": {}, "alpn": {}, "rate": {}, "etar": {},
 	"dial": {}, "socks": {}, "next": {}, "up": {}, "down": {},
-	"pool": {}, "sni": {}, "pin": {},
+	"mux": {}, "sni": {}, "pin": {},
 }
 
 func withoutAuthorityCredential(value string) string {
@@ -134,7 +134,7 @@ func portalURLsMatch(commandURL, configURL string) bool {
 		}
 		if !nextEnabled {
 			switch key {
-			case "up", "down", "pool", "sni", "pin":
+			case "up", "down", "mux", "sni", "pin":
 				continue
 			}
 		}
@@ -255,7 +255,7 @@ func ApplyInstanceConfig(tunnel *models.Tunnel, instance InstanceResult) {
 	tunnel.Next = parsed.Next
 	tunnel.Up = parsed.Up
 	tunnel.Down = parsed.Down
-	tunnel.PoolSize = parsed.PoolSize
+	tunnel.Mux = parsed.Mux
 	tunnel.Sni = parsed.Sni
 	tunnel.Pin = parsed.Pin
 }
@@ -347,7 +347,14 @@ func ParseTunnelURL(rawURL string) *models.Tunnel {
 		down = "udp"
 	}
 	tunnel.Down = &down
-	tunnel.PoolSize = int64Ptr(query.Get("pool"))
+	mux := query.Get("mux")
+	if mux == "" {
+		mux = "0"
+		if legacyPool := int64Ptr(query.Get("pool")); legacyPool != nil && *legacyPool > 0 {
+			mux = "1"
+		}
+	}
+	tunnel.Mux = stringPtr(mux)
 	tunnel.Sni = stringPtr(query.Get("sni"))
 	tunnel.Pin = stringPtr(query.Get("pin"))
 
@@ -418,12 +425,13 @@ func ValidatePortalTunnel(tunnel models.Tunnel) error {
 
 	if next != "none" {
 		for name, transport := range map[string]string{"up": valueOr(tunnel.Up, "udp"), "down": valueOr(tunnel.Down, "udp")} {
-			if transport != "tcp" && transport != "udp" {
-				return fmt.Errorf("%s must be tcp or udp", name)
+			if transport != "mix" && transport != "tcp" && transport != "udp" {
+				return fmt.Errorf("%s must be mix, tcp, or udp", name)
 			}
 		}
-		if tunnel.PoolSize != nil && (*tunnel.PoolSize < 0 || *tunnel.PoolSize > 256) {
-			return fmt.Errorf("pool must be between 0 and 256")
+		mux := valueOr(tunnel.Mux, "0")
+		if mux != "0" && mux != "1" {
+			return fmt.Errorf("mux must be 0 or 1")
 		}
 		if tunnel.Pin != nil && *tunnel.Pin != "" && *tunnel.Pin != "none" {
 			if len(*tunnel.Pin) != 64 || strings.ToLower(*tunnel.Pin) != *tunnel.Pin {
@@ -488,11 +496,15 @@ func BuildTunnelURLs(tunnel models.Tunnel) string {
 	}
 	query.Set("next", next)
 	if next != "none" {
-		query.Set("up", valueOr(tunnel.Up, "udp"))
-		query.Set("down", valueOr(tunnel.Down, "udp"))
-		if tunnel.PoolSize != nil {
-			setIntQuery(query, "pool", tunnel.PoolSize, 0)
+		up := valueOr(tunnel.Up, "udp")
+		down := valueOr(tunnel.Down, "udp")
+		query.Set("up", up)
+		query.Set("down", down)
+		mux := valueOr(tunnel.Mux, "0")
+		if up == "udp" && down == "udp" {
+			mux = "0"
 		}
+		query.Set("mux", mux)
 		query.Set("sni", valueOr(tunnel.Sni, "none"))
 		query.Set("pin", valueOr(tunnel.Pin, "none"))
 	}
@@ -547,7 +559,7 @@ func TunnelToMap(tunnel *models.Tunnel) map[string]interface{} {
 		"next":            tunnel.Next,
 		"up":              tunnel.Up,
 		"down":            tunnel.Down,
-		"pool_size":       tunnel.PoolSize,
+		"mux":             tunnel.Mux,
 		"sni":             tunnel.Sni,
 		"pin":             tunnel.Pin,
 	}
@@ -586,7 +598,7 @@ func TunnelConfigFromTunnel(tunnel *models.Tunnel) *TunnelConfig {
 		Next:       valueOr(tunnel.Next, "none"),
 		Up:         valueOr(tunnel.Up, "udp"),
 		Down:       valueOr(tunnel.Down, "udp"),
-		PoolSize:   intValue(tunnel.PoolSize),
+		Mux:        valueOr(tunnel.Mux, "0"),
 		Sni:        valueOr(tunnel.Sni, "none"),
 		Pin:        valueOr(tunnel.Pin, "none"),
 		LogLevel:   string(tunnel.LogLevel),
@@ -625,7 +637,7 @@ func (config *TunnelConfig) BuildTunnelConfigURL() string {
 		Next:       stringPtr(config.Next),
 		Up:         stringPtr(config.Up),
 		Down:       stringPtr(config.Down),
-		PoolSize:   int64Ptr(config.PoolSize),
+		Mux:        stringPtr(config.Mux),
 		Sni:        stringPtr(config.Sni),
 		Pin:        stringPtr(config.Pin),
 	}
@@ -652,11 +664,13 @@ func BuildVectorURL(tunnel models.Tunnel, portalHost, socksListener string) (str
 		socksListener = "127.0.0.1:1080"
 	}
 
-	transport := "udp"
-	pool := int64(0)
-	if valueOr(tunnel.Network, "mix") == "tcp" {
-		transport = "tcp"
-		pool = 5
+	transport := strings.ToLower(valueOr(tunnel.Network, "mix"))
+	if transport != "mix" && transport != "tcp" && transport != "udp" {
+		transport = "mix"
+	}
+	mux := "1"
+	if transport == "udp" {
+		mux = "0"
 	}
 	parsed := &url.URL{
 		Scheme: "nowhere",
@@ -666,7 +680,7 @@ func BuildVectorURL(tunnel models.Tunnel, portalHost, socksListener string) (str
 	query := url.Values{}
 	query.Set("up", transport)
 	query.Set("down", transport)
-	query.Set("pool", strconv.FormatInt(pool, 10))
+	query.Set("mux", mux)
 	query.Set("sni", "none")
 	query.Set("pin", "none")
 	query.Set("alpn", valueOr(tunnel.ALPN, "now/1"))

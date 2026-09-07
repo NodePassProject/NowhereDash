@@ -59,11 +59,14 @@ REGISTER_TOKEN=""
 NODE_REGISTERED=0
 WORK_DIR=""
 OS_ID=""
+PLATFORM=""
 MACHINE=""
 GO_ARCH=""
 DASH_ARCH=""
 RUST_ARCH=""
-LIBC_KIND="gnu"
+ADMIN_GROUP="root"
+NODE_STDOUT_LOG=""
+NODE_STDERR_LOG=""
 
 DASH_PORT="4000"
 DASH_CHANNEL="stable"
@@ -146,6 +149,11 @@ trap 'on_error "$LINENO"' ERR
 show_help() {
     cat <<EOF
 Nowhere / NowhereDash 统一安装脚本
+
+平台支持:
+  Linux                 Dash 与节点（systemd；Nowhere 使用静态 musl 包）
+  macOS Apple Silicon   节点（launchd）
+  Windows x86_64        请使用 scripts/install.ps1
 
 用法:
   $0
@@ -571,6 +579,16 @@ json_escape() {
     printf '%s' "$value"
 }
 
+xml_escape() {
+    local value="$1"
+    value=${value//&/&amp;}
+    value=${value//</&lt;}
+    value=${value//>/&gt;}
+    value=${value//\"/&quot;}
+    value=${value//\'/&apos;}
+    printf '%s' "$value"
+}
+
 config_get() {
     local file="$1"
     local key="$2"
@@ -603,57 +621,93 @@ require_root() {
 }
 
 detect_system() {
-    [[ "$(uname -s)" == "Linux" ]] || die "仅支持 Linux。"
-    OS_ID=$(awk -F= '$1 == "ID" {gsub(/"/, "", $2); print $2; exit}' /etc/os-release 2>/dev/null || true)
-    OS_ID="${OS_ID:-unknown}"
+    PLATFORM=$(uname -s)
     MACHINE=$(uname -m)
 
-    case "$MACHINE" in
-        x86_64|amd64)
-            GO_ARCH="amd64"
-            DASH_ARCH="x86_64"
-            RUST_ARCH="x86_64"
+    case "$PLATFORM" in
+        Linux)
+            OS_ID=$(awk -F= '$1 == "ID" {gsub(/"/, "", $2); print $2; exit}' /etc/os-release 2>/dev/null || true)
+            OS_ID="${OS_ID:-linux}"
+            case "$MACHINE" in
+                x86_64|amd64)
+                    GO_ARCH="amd64"
+                    DASH_ARCH="x86_64"
+                    RUST_ARCH="x86_64"
+                    ;;
+                aarch64|arm64)
+                    GO_ARCH="arm64"
+                    DASH_ARCH="arm64"
+                    RUST_ARCH="aarch64"
+                    ;;
+                armv7l)
+                    GO_ARCH="arm"
+                    DASH_ARCH="armv7hf"
+                    RUST_ARCH=""
+                    ;;
+                armv6l)
+                    GO_ARCH="arm"
+                    DASH_ARCH="armv6hf"
+                    RUST_ARCH=""
+                    ;;
+                *) die "不支持的 Linux 架构: $MACHINE" ;;
+            esac
+            # The musl build is static and avoids the host glibc version entirely.
+            command -v systemctl >/dev/null 2>&1 || die "未找到 systemctl，本脚本在 Linux 上需要 systemd。"
+            [[ -d /run/systemd/system ]] || die "systemd 当前未运行。"
             ;;
-        aarch64|arm64)
-            GO_ARCH="arm64"
-            DASH_ARCH="arm64"
-            RUST_ARCH="aarch64"
+        Darwin)
+            OS_ID="macos"
+            ADMIN_GROUP="wheel"
+            NODE_USER="nobody"
+            NODE_SERVICE="com.nodepass.openctrl"
+            NODE_UNIT="/Library/LaunchDaemons/$NODE_SERVICE.plist"
+            NODE_STDOUT_LOG="$NODE_INSTALL_DIR/logs/openctrl.log"
+            NODE_STDERR_LOG="$NODE_INSTALL_DIR/logs/openctrl-error.log"
+            case "$MACHINE" in
+                arm64|aarch64)
+                    GO_ARCH="arm64"
+                    RUST_ARCH="aarch64"
+                    ;;
+                x86_64|amd64)
+                    GO_ARCH="amd64"
+                    RUST_ARCH=""
+                    ;;
+                *) die "不支持的 macOS 架构: $MACHINE" ;;
+            esac
+            command -v launchctl >/dev/null 2>&1 || die "未找到 launchctl。"
             ;;
-        armv7l)
-            GO_ARCH="arm"
-            DASH_ARCH="armv7hf"
-            RUST_ARCH=""
-            ;;
-        armv6l)
-            GO_ARCH="arm"
-            DASH_ARCH="armv6hf"
-            RUST_ARCH=""
+        MINGW*|MSYS*|CYGWIN*)
+            die "Windows 请在管理员 PowerShell 中运行 scripts/install.ps1。"
             ;;
         *)
-            die "不支持的架构: $MACHINE"
+            die "不支持的操作系统: $PLATFORM"
             ;;
     esac
 
-    LIBC_KIND="gnu"
-    if command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl; then
-        LIBC_KIND="musl"
-    elif compgen -G '/lib/ld-musl-*.so.1' >/dev/null 2>&1; then
-        LIBC_KIND="musl"
+    if [[ "$PLATFORM" == "Linux" ]]; then
+        log_info "系统: $OS_ID, 架构: $MACHINE, Nowhere 资产: musl"
+    else
+        log_info "系统: $OS_ID, 架构: $MACHINE"
     fi
-
-    command -v systemctl >/dev/null 2>&1 || die "未找到 systemctl，本脚本需要 systemd。"
-    [[ -d /run/systemd/system ]] || die "systemd 当前未运行。"
-    log_info "系统: $OS_ID, 架构: $MACHINE, libc: $LIBC_KIND"
 }
 
 install_dependencies() {
     local missing=()
     local command
-    for command in curl tar awk sed grep find install base64 sha256sum tr; do
+    for command in curl tar awk sed grep find install base64 tr; do
         command -v "$command" >/dev/null 2>&1 || missing+=("$command")
     done
+    if ! command -v sha256sum >/dev/null 2>&1 &&
+        ! command -v shasum >/dev/null 2>&1 &&
+        ! command -v openssl >/dev/null 2>&1; then
+        missing+=("SHA-256")
+    fi
     if [[ ${#missing[@]} -eq 0 ]]; then
         return
+    fi
+
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        die "缺少基础命令: ${missing[*]}。请先安装 Xcode Command Line Tools。"
     fi
 
     log_info "安装基础依赖: ${missing[*]}"
@@ -950,12 +1004,61 @@ rollback_binary() {
     fi
 }
 
+node_service_is_active() {
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        launchctl print "system/$NODE_SERVICE" 2>/dev/null | grep -q 'state = running'
+    else
+        systemctl is-active --quiet "$NODE_SERVICE"
+    fi
+}
+
+stop_node_service() {
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        launchctl bootout system "$NODE_UNIT" >/dev/null 2>&1 || true
+    else
+        systemctl stop "$NODE_SERVICE"
+    fi
+}
+
+start_node_service() {
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        launchctl bootout system "$NODE_UNIT" >/dev/null 2>&1 || true
+        launchctl bootstrap system "$NODE_UNIT"
+        launchctl enable "system/$NODE_SERVICE"
+        launchctl kickstart -k "system/$NODE_SERVICE"
+    else
+        systemctl daemon-reload
+        systemctl enable "$NODE_SERVICE" >/dev/null
+        systemctl restart "$NODE_SERVICE"
+    fi
+}
+
+restart_node_service() {
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        launchctl kickstart -k "system/$NODE_SERVICE"
+    else
+        systemctl restart "$NODE_SERVICE"
+    fi
+}
+
+disable_node_service() {
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        launchctl bootout system "$NODE_UNIT" >/dev/null 2>&1 || true
+        launchctl disable "system/$NODE_SERVICE" >/dev/null 2>&1 || true
+    else
+        systemctl disable --now "$NODE_SERVICE" >/dev/null 2>&1 || true
+    fi
+}
+
 wait_service_active() {
     local service="$1"
     local attempts="${2:-20}"
     local i
     for ((i = 0; i < attempts; i++)); do
-        if systemctl is-active --quiet "$service"; then
+        if [[ "$service" == "$NODE_SERVICE" ]] && node_service_is_active; then
+            return 0
+        fi
+        if [[ "$service" != "$NODE_SERVICE" ]] && systemctl is-active --quiet "$service"; then
             return 0
         fi
         sleep 1
@@ -966,6 +1069,10 @@ wait_service_active() {
 open_firewall_port() {
     local port="$1"
     [[ "$NO_FIREWALL" -eq 0 ]] || return 0
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        log_warning "macOS 防火墙未自动修改；请确认 TCP/$port 可访问。"
+        return 0
+    fi
     if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; then
         ufw allow "$port/tcp" >/dev/null
         log_success "已添加 UFW TCP/$port 规则。"
@@ -981,6 +1088,7 @@ open_firewall_port() {
 remove_firewall_port() {
     local port="$1"
     validate_port "$port" || return 0
+    [[ "$PLATFORM" != "Darwin" ]] || return 0
     if command -v ufw >/dev/null 2>&1; then
         ufw delete allow "$port/tcp" >/dev/null 2>&1 || true
     fi
@@ -1380,6 +1488,9 @@ configure_node_interactive() {
 }
 
 validate_node_config() {
+    if [[ -z "$RUST_ARCH" && "$PLATFORM" == "Darwin" ]]; then
+        die "Nowhere Release 当前仅提供 Apple Silicon (arm64) 的 macOS 产物。"
+    fi
     [[ -n "$RUST_ARCH" ]] || die "Nowhere 官方 Release 仅支持 x86_64 和 aarch64。"
     validate_host "$NODE_LISTEN_HOST" || die "无效 OpenCtrl 监听地址: $NODE_LISTEN_HOST"
     if [[ -z "$NODE_PUBLIC_HOST" ]]; then
@@ -1387,6 +1498,9 @@ validate_node_config() {
     fi
     validate_host "$NODE_PUBLIC_HOST" || die "无效 OpenCtrl 公网地址: $NODE_PUBLIC_HOST"
     validate_port "$NODE_PORT" || die "无效 OpenCtrl 端口: $NODE_PORT"
+    if [[ "$PLATFORM" == "Darwin" && 10#$NODE_PORT -lt 1024 ]]; then
+        die "macOS launchd 服务使用非特权用户运行，OpenCtrl 端口必须不小于 1024。"
+    fi
     validate_prefix "$NODE_PREFIX" || die "无效 OpenCtrl API 前缀: $NODE_PREFIX"
     validate_github_proxy "$GITHUB_PROXY" || die "无效 GitHub 代理地址: $GITHUB_PROXY"
     [[ "$NODE_TLS" =~ ^[012]$ ]] || die "OpenCtrl TLS 必须是 0、1 或 2。"
@@ -1413,13 +1527,18 @@ validate_node_config() {
 
 setup_node_directories() {
     local user_existed=0
-    id "$NODE_USER" >/dev/null 2>&1 && user_existed=1
-    ensure_system_user "$NODE_USER" "$NODE_INSTALL_DIR"
-    mkdir -p "$NODE_BIN_DIR" "$NODE_STATE_DIR" "$NODE_CONFIG_DIR" "$NODE_CERT_DIR" "$NOWHERE_CERT_DIR"
-    chown root:root "$NODE_INSTALL_DIR" "$NODE_BIN_DIR"
+    if [[ "$PLATFORM" == "Linux" ]]; then
+        id "$NODE_USER" >/dev/null 2>&1 && user_existed=1
+        ensure_system_user "$NODE_USER" "$NODE_INSTALL_DIR"
+    else
+        user_existed=1
+    fi
+    mkdir -p "$NODE_BIN_DIR" "$NODE_STATE_DIR" "$NODE_CONFIG_DIR" "$NODE_CERT_DIR" \
+        "$NOWHERE_CERT_DIR" "$NODE_INSTALL_DIR/logs"
+    chown root:"$ADMIN_GROUP" "$NODE_INSTALL_DIR" "$NODE_BIN_DIR"
     chmod 0755 "$NODE_INSTALL_DIR" "$NODE_BIN_DIR"
-    chown -R "$NODE_USER:$NODE_USER" "$NODE_STATE_DIR"
-    chmod 0700 "$NODE_STATE_DIR"
+    chown -R "$NODE_USER:$NODE_USER" "$NODE_STATE_DIR" "$NODE_INSTALL_DIR/logs"
+    chmod 0700 "$NODE_STATE_DIR" "$NODE_INSTALL_DIR/logs"
     chown root:"$NODE_USER" "$NODE_CONFIG_DIR" "$NODE_CERT_DIR" "$NOWHERE_CERT_DIR"
     chmod 0750 "$NODE_CONFIG_DIR" "$NODE_CERT_DIR" "$NOWHERE_CERT_DIR"
     if [[ "$user_existed" -eq 0 ]]; then
@@ -1472,10 +1591,57 @@ OPENCTRL_VERSION=$openctrl_version
 NOWHERE_VERSION=$nowhere_version
 GITHUB_PROXY=$GITHUB_PROXY
 EOF
-    install -m 0600 -o root -g root "$install_temp" "$NODE_INSTALL_CONFIG"
+    install -m 0600 -o root -g "$ADMIN_GROUP" "$install_temp" "$NODE_INSTALL_CONFIG"
 }
 
 write_node_service() {
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        local master_url master_url_xml binary_xml work_dir_xml stdout_xml stderr_xml
+        master_url=$(config_get "$NODE_ENV_FILE" OPENCTRL_URL)
+        master_url_xml=$(xml_escape "$master_url")
+        binary_xml=$(xml_escape "$OPENCTRL_BINARY")
+        work_dir_xml=$(xml_escape "$NODE_INSTALL_DIR")
+        stdout_xml=$(xml_escape "$NODE_STDOUT_LOG")
+        stderr_xml=$(xml_escape "$NODE_STDERR_LOG")
+        cat >"$NODE_UNIT" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$NODE_SERVICE</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$binary_xml</string>
+        <string>$master_url_xml</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>$work_dir_xml</string>
+    <key>UserName</key>
+    <string>$NODE_USER</string>
+    <key>GroupName</key>
+    <string>$NODE_USER</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>$stdout_xml</string>
+    <key>StandardErrorPath</key>
+    <string>$stderr_xml</string>
+    <key>Umask</key>
+    <integer>63</integer>
+</dict>
+</plist>
+EOF
+        chown root:wheel "$NODE_UNIT"
+        chmod 0644 "$NODE_UNIT"
+        plutil -lint "$NODE_UNIT" >/dev/null
+        return
+    fi
+
     cat >"$NODE_UNIT" <<EOF
 [Unit]
 Description=OpenCtrl master for Nowhere
@@ -1516,7 +1682,109 @@ EOF
     chmod 0644 "$NODE_UNIT"
 }
 
+write_node_ctl_launchd() {
+    local proxy_quoted
+    printf -v proxy_quoted '%q' "$GITHUB_PROXY"
+    cat >"$NODE_CTL" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+LABEL="$NODE_SERVICE"
+PLIST="$NODE_UNIT"
+NOWHERE="$NOWHERE_BINARY"
+ENDPOINT_FILE="$NODE_ENDPOINT_FILE"
+STDOUT_LOG="$NODE_STDOUT_LOG"
+STDERR_LOG="$NODE_STDERR_LOG"
+INSTALLER_URL="$INSTALLER_URL"
+GITHUB_PROXY=$proxy_quoted
+
+need_root() {
+    [[ "\$(id -u)" -eq 0 ]] || { echo "请使用 sudo 运行。" >&2; exit 1; }
+}
+
+github_url() {
+    local url="\$1"
+    if [[ -z "\$GITHUB_PROXY" ]]; then
+        printf '%s' "\$url"
+    else
+        printf '%s/%s' "\${GITHUB_PROXY%/}" "\$url"
+    fi
+}
+
+run_installer() {
+    need_root
+    local temp
+    temp=\$(mktemp /tmp/nowheredash-installer.XXXXXX)
+    trap 'rm -f "\$temp"' EXIT
+    curl -fsSL -o "\$temp" "\$(github_url "\$INSTALLER_URL")"
+    NOWHEREDASH_GITHUB_PROXY="\$GITHUB_PROXY" bash "\$temp" "\$@"
+}
+
+show_info() {
+    need_root
+    local api_url api_key uri
+    [[ -r "\$ENDPOINT_FILE" ]] || {
+        echo "连接信息不存在，请重新运行节点安装或更新。" >&2
+        exit 1
+    }
+    api_url=\$(sed -n 's/^OPENCTRL_API_URL=//p' "\$ENDPOINT_FILE" | head -n 1)
+    api_key=\$(sed -n 's/^OPENCTRL_API_KEY=//p' "\$ENDPOINT_FILE" | head -n 1)
+    uri=\$(sed -n 's/^NOWHEREDASH_IMPORT_URI=//p' "\$ENDPOINT_FILE" | head -n 1)
+    printf 'API URL: %s\nAPI KEY: %s\nURI: %s\n' "\$api_url" "\$api_key" "\$uri"
+}
+
+case "\${1:-}" in
+    start)
+        need_root
+        launchctl print "system/\$LABEL" >/dev/null 2>&1 || launchctl bootstrap system "\$PLIST"
+        launchctl enable "system/\$LABEL"
+        launchctl kickstart -k "system/\$LABEL"
+        ;;
+    stop)
+        need_root
+        launchctl bootout system "\$PLIST"
+        ;;
+    restart)
+        need_root
+        launchctl kickstart -k "system/\$LABEL"
+        ;;
+    status)
+        launchctl print "system/\$LABEL"
+        ;;
+    logs)
+        need_root
+        touch "\$STDOUT_LOG" "\$STDERR_LOG"
+        tail -n 100 -F "\$STDOUT_LOG" "\$STDERR_LOG"
+        ;;
+    tui)
+        need_root
+        sudo -u "$NODE_USER" "\$NOWHERE" tui
+        ;;
+    info)
+        show_info
+        ;;
+    update)
+        shift
+        run_installer update nowhere --non-interactive "\$@"
+        ;;
+    uninstall)
+        shift
+        run_installer uninstall nowhere "\$@"
+        ;;
+    *)
+        echo "用法: nowhere-ctl {start|stop|restart|status|logs|tui|info|update|uninstall}"
+        exit 1
+        ;;
+esac
+EOF
+    chmod 0755 "$NODE_CTL"
+}
+
 write_node_ctl() {
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        write_node_ctl_launchd
+        return
+    fi
+
     local proxy_quoted
     printf -v proxy_quoted '%q' "$GITHUB_PROXY"
     cat >"$NODE_CTL" <<EOF
@@ -1611,13 +1879,24 @@ EOF
 
 node_service_pid() {
     local pid
-    pid=$(systemctl show "$NODE_SERVICE" --property MainPID --value 2>/dev/null || true)
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        pid=$(launchctl print "system/$NODE_SERVICE" 2>/dev/null |
+            sed -nE 's/^[[:space:]]*pid = ([0-9]+).*$/\1/p' | head -n 1)
+    else
+        pid=$(systemctl show "$NODE_SERVICE" --property MainPID --value 2>/dev/null || true)
+    fi
     [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
     printf '%s' "$pid"
 }
 
 show_node_diagnostics() {
     local pid
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        tail -n 100 "$NODE_STDOUT_LOG" "$NODE_STDERR_LOG" 2>/dev/null | sed -E \
+            -e 's/(API key (created|loaded): )[[:xdigit:]]{32}/\1<redacted>/g' \
+            -e 's#(portal://)[^/@[:space:]]+@#\1<redacted>@#g' || true
+        return
+    fi
     if pid=$(node_service_pid); then
         journalctl -u "$NODE_SERVICE" "_PID=$pid" -n 100 --no-pager 2>/dev/null
     else
@@ -1692,10 +1971,10 @@ OPENCTRL_API_URL=$api_url
 OPENCTRL_API_KEY=$key
 NOWHEREDASH_IMPORT_URI=$import_uri
 EOF
-    install -m 0600 -o root -g root "$temp" "$NODE_ENDPOINT_FILE"
+    install -m 0600 -o root -g "$ADMIN_GROUP" "$temp" "$NODE_ENDPOINT_FILE"
     key_temp="$WORK_DIR/openctrl-api-key"
     printf '%s\n' "$key" >"$key_temp"
-    install -m 0600 -o root -g root "$key_temp" "$NODE_API_KEY_FILE"
+    install -m 0600 -o root -g "$ADMIN_GROUP" "$key_temp" "$NODE_API_KEY_FILE"
 }
 
 register_node_endpoint() {
@@ -1784,11 +2063,21 @@ install_node() {
     fi
     validate_node_config
 
-    download_release_binary openctrl "$OPENCTRL_REPO" "$OPENCTRL_REQUESTED_VERSION" stable \
-        "^openctrl_.*_linux_$GO_ARCH\\.tar\\.gz$" openctrl "$oc_staged"
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        download_release_binary openctrl "$OPENCTRL_REPO" "$OPENCTRL_REQUESTED_VERSION" stable \
+            "^openctrl_.*_darwin_$GO_ARCH\\.tar\\.gz$" openctrl "$oc_staged"
+    else
+        download_release_binary openctrl "$OPENCTRL_REPO" "$OPENCTRL_REQUESTED_VERSION" stable \
+            "^openctrl_.*_linux_$GO_ARCH\\.tar\\.gz$" openctrl "$oc_staged"
+    fi
     oc_version="$RELEASE_VERSION"
-    download_release_binary nowhere "$NOWHERE_REPO" "$NOWHERE_REQUESTED_VERSION" stable \
-        "^nowhere-$RUST_ARCH-unknown-linux-$LIBC_KIND\\.tar\\.gz$" nowhere "$nw_staged"
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        download_release_binary nowhere "$NOWHERE_REPO" "$NOWHERE_REQUESTED_VERSION" stable \
+            "^nowhere-$RUST_ARCH-apple-darwin\\.tar\\.gz$" nowhere "$nw_staged"
+    else
+        download_release_binary nowhere "$NOWHERE_REPO" "$NOWHERE_REQUESTED_VERSION" stable \
+            "^nowhere-$RUST_ARCH-unknown-linux-musl\\.tar\\.gz$" nowhere "$nw_staged"
+    fi
     nw_version="$RELEASE_VERSION"
 
     setup_node_directories
@@ -1799,21 +2088,19 @@ install_node() {
 
     [[ -f "$OPENCTRL_BINARY" ]] && had_oc=1
     [[ -f "$NOWHERE_BINARY" ]] && had_nw=1
-    if systemctl is-active --quiet "$NODE_SERVICE"; then
-        systemctl stop "$NODE_SERVICE"
+    if node_service_is_active; then
+        stop_node_service
     fi
-    install_binary_atomic "$oc_staged" "$OPENCTRL_BINARY" root root
-    install_binary_atomic "$nw_staged" "$NOWHERE_BINARY" root root
+    install_binary_atomic "$oc_staged" "$OPENCTRL_BINARY" root "$ADMIN_GROUP"
+    install_binary_atomic "$nw_staged" "$NOWHERE_BINARY" root "$ADMIN_GROUP"
     ln -sfn "$NOWHERE_BINARY" /usr/local/bin/nowhere
     ln -sfn "$OPENCTRL_BINARY" /usr/local/bin/openctrl
 
-    systemctl daemon-reload
-    systemctl enable "$NODE_SERVICE" >/dev/null
-    if ! systemctl restart "$NODE_SERVICE" || ! wait_service_active "$NODE_SERVICE"; then
+    if ! start_node_service || ! wait_service_active "$NODE_SERVICE"; then
         show_node_diagnostics >&2 || true
         [[ "$had_oc" -eq 1 ]] && rollback_binary "$OPENCTRL_BINARY"
         [[ "$had_nw" -eq 1 ]] && rollback_binary "$NOWHERE_BINARY"
-        systemctl restart "$NODE_SERVICE" >/dev/null 2>&1 || true
+        restart_node_service >/dev/null 2>&1 || true
         die "OpenCtrl 启动失败。"
     fi
 
@@ -1825,7 +2112,7 @@ install_node() {
         show_node_diagnostics >&2 || true
         [[ "$had_oc" -eq 1 ]] && rollback_binary "$OPENCTRL_BINARY"
         [[ "$had_nw" -eq 1 ]] && rollback_binary "$NOWHERE_BINARY"
-        systemctl restart "$NODE_SERVICE" >/dev/null 2>&1 || true
+        restart_node_service >/dev/null 2>&1 || true
         die "OpenCtrl API 健康检查失败。"
     fi
 
@@ -1882,7 +2169,7 @@ uninstall_node() {
     local port remove_user=0
     [[ -f "$NODE_USER_MARKER" ]] && remove_user=1
     port=$(config_get "$NODE_INSTALL_CONFIG" PORT)
-    systemctl disable --now "$NODE_SERVICE" >/dev/null 2>&1 || true
+    disable_node_service
     rm -f "$NODE_UNIT" "$NODE_CTL" /usr/local/bin/nowhere /usr/local/bin/openctrl
     rm -f "$OPENCTRL_BINARY" "$OPENCTRL_BINARY.new" "$OPENCTRL_BINARY.previous" \
         "$NOWHERE_BINARY" "$NOWHERE_BINARY.new" "$NOWHERE_BINARY.previous"
@@ -1898,7 +2185,13 @@ uninstall_node() {
 
 show_status() {
     local service="$1"
-    if systemctl cat "$service.service" >/dev/null 2>&1; then
+    if [[ "$PLATFORM" == "Darwin" ]]; then
+        if [[ "$service" == "$NODE_SERVICE" && -f "$NODE_UNIT" ]]; then
+            launchctl print "system/$service" || true
+        else
+            log_warning "$service 未安装或当前平台不支持。"
+        fi
+    elif systemctl cat "$service.service" >/dev/null 2>&1; then
         systemctl status "$service" --no-pager || true
     else
         log_warning "$service 未安装。"
@@ -1920,6 +2213,9 @@ switch_dash_channel() {
 }
 
 dispatch_install() {
+    if [[ "$PLATFORM" == "Darwin" && "$TARGET" != "nowhere" ]]; then
+        die "NowhereDash Release 当前没有 macOS 产物；macOS 目前仅支持安装 Apple Silicon 节点。"
+    fi
     case "$TARGET" in
         dash)
             install_dash
@@ -1944,6 +2240,9 @@ dispatch_install() {
 
 dispatch_uninstall() {
     local label="$TARGET"
+    if [[ "$PLATFORM" == "Darwin" && "$TARGET" != "nowhere" ]]; then
+        die "macOS 当前仅支持管理 Nowhere 节点。"
+    fi
     [[ "$PURGE" -eq 1 ]] && label="$label（含全部数据）"
     confirm "确认卸载 $label 吗？" || exit 0
     case "$TARGET" in
@@ -1955,7 +2254,7 @@ dispatch_uninstall() {
             ;;
         *) die "未知卸载目标: $TARGET" ;;
     esac
-    systemctl daemon-reload
+    [[ "$PLATFORM" != "Linux" ]] || systemctl daemon-reload
 }
 
 main() {
@@ -1967,6 +2266,8 @@ main() {
     if [[ "$ACTION" == "menu" ]]; then
         interactive_menu
     fi
+
+    detect_system
 
     if [[ "$ACTION" == "status" ]]; then
         case "$TARGET" in
@@ -1981,7 +2282,6 @@ main() {
     fi
 
     require_root
-    detect_system
     install_dependencies
     make_work_dir
 
@@ -1994,6 +2294,7 @@ main() {
             ;;
         switch)
             [[ "$TARGET" == "dash" ]] || die "仅 Dash 支持 stable/beta 切换。"
+            [[ "$PLATFORM" != "Darwin" ]] || die "NowhereDash Release 当前没有 macOS 产物。"
             switch_dash_channel
             ;;
         *)

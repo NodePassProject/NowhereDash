@@ -5,7 +5,7 @@ import React, {
   useState,
   useMemo,
 } from "react";
-import { Button, Card, CardBody, CardHeader, Chip } from "@heroui/react";
+import { Button, Card, CardBody, CardHeader } from "@heroui/react";
 import { Icon } from "@iconify/react/dist/offline";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { addToast } from "@heroui/toast";
@@ -32,7 +32,6 @@ interface EndpointDetail {
   color?: string;
   os?: string;
   arch?: string;
-  ver?: string;
   log?: string;
   tls?: string;
   crt?: string;
@@ -90,7 +89,10 @@ export default function SSEDebugPage() {
       console.error(err);
       addToast({
         title: t("details.sseDebug.toast.loadFailed"),
-        description: err instanceof Error ? err.message : t("details.sseDebug.toast.unknownError"),
+        description:
+          err instanceof Error
+            ? err.message
+            : t("details.sseDebug.toast.unknownError"),
         color: "danger",
       });
     } finally {
@@ -224,14 +226,11 @@ export default function SSEDebugPage() {
               <h1 className="text-lg md:text-2xl font-bold truncate">
                 {endpointDetail.name} - {t("details.sseDebug.pageTitle")}
               </h1>
-              {endpointDetail.ver && (
-                <Chip color="secondary" variant="flat">
-                  {endpointDetail.ver}
-                </Chip>
-              )}
             </div>
           ) : (
-            <h1 className="text-lg md:text-2xl font-bold truncate">{t("details.sseDebug.pageSubtitle")}</h1>
+            <h1 className="text-lg md:text-2xl font-bold truncate">
+              {t("details.sseDebug.pageSubtitle")}
+            </h1>
           )}
         </div>
       </div>
@@ -241,7 +240,9 @@ export default function SSEDebugPage() {
         <CardHeader className="flex flex-col md:flex-row md:items-center gap-3 md:justify-between">
           <div className="flex items-center justify-between md:justify-start gap-3 w-full md:w-auto">
             <div className="flex items-center gap-3">
-              <h3 className="text-lg font-semibold">{t("details.sseDebug.cardTitle")}</h3>
+              <h3 className="text-lg font-semibold">
+                {t("details.sseDebug.cardTitle")}
+              </h3>
               <div className="flex items-center gap-2">
                 <div
                   className={`w-2 h-2 rounded-full ${

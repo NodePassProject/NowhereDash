@@ -478,7 +478,7 @@ func (s *Service) fetchAndUpdateEndpointInfo(endpointID int64) {
 		} else {
 			// 在日志中显示uptime信息
 			uptimeMsg := fmt.Sprintf("%d秒", info.Uptime)
-			log.Infof("[Master-%d] 系统信息已更新: OS=%s, Arch=%s, Ver=%s, Uptime=%s", endpointID, info.OS, info.Arch, info.Ver, uptimeMsg)
+			log.Infof("[Master-%d] 系统信息已更新: OS=%s, Arch=%s, Uptime=%s", endpointID, info.OS, info.Arch, uptimeMsg)
 		}
 	}
 }

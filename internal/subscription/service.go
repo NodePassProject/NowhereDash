@@ -159,17 +159,17 @@ func (s *Service) Update(id int64, req UpsertRequest) (*Response, error) {
 
 func (s *Service) Delete(id int64) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&models.PortalSubscription{}).Where("id = ?", id).Count(&count).Error; err != nil {
-			return err
-		}
-		if count == 0 {
-			return ErrNotFound
-		}
 		if err := tx.Where("subscription_id = ?", id).Delete(&models.PortalSubscriptionTunnel{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&models.PortalSubscription{}, id).Error
+		result := tx.Delete(&models.PortalSubscription{}, id)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		return nil
 	})
 }
 
@@ -800,8 +800,8 @@ func renderPortal(tunnel *models.Tunnel, preferences Preferences) []string {
 				name += " | " + strings.ToUpper(combo.up) + "/" + strings.ToUpper(combo.down)
 			}
 			query := "up=" + combo.up + "&down=" + combo.down
-			if combo.up == "tcp" && combo.down == "tcp" {
-				query += "&pool=5"
+			if combo.up == "tcp" || combo.down == "tcp" {
+				query += "&mux=1"
 			}
 			if tunnel.ALPN != nil && *tunnel.ALPN != "" {
 				query += "&alpn=" + percentEncode(*tunnel.ALPN)
@@ -905,7 +905,7 @@ func percentEncode(value string) string {
 
 func subscriptionHeaders(subscription models.PortalSubscription) map[string]string {
 	title := base64.StdEncoding.EncodeToString([]byte(subscription.ProfileTitle))
-	icon := subscriptionIconBase64(subscription.Icon)
+	lightIcon, darkIcon := subscriptionIconBase64Pair(subscription.Icon)
 	total := int64(-1)
 	if subscription.TrafficLimit != nil {
 		total = *subscription.TrafficLimit
@@ -918,8 +918,8 @@ func subscriptionHeaders(subscription models.PortalSubscription) map[string]stri
 		parts = append(parts, "expire="+strconv.FormatInt(subscription.ExpiresAt.Unix(), 10))
 	}
 	return map[string]string{
-		"aw-icon-dark":           icon,
-		"aw-icon-light":          icon,
+		"aw-icon-dark":           darkIcon,
+		"aw-icon-light":          lightIcon,
 		"profile-title":          "base64:" + title,
 		"subscription-userinfo":  strings.Join(parts, "; "),
 		"cache-control":          "no-store",

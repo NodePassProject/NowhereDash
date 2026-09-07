@@ -1,92 +1,89 @@
 <div align="center">
-  <img src="web/public/nowhere.png" alt="NowhereDash" height="80">
+  <img src="docs/logo.png" alt="NowhereDash" width="320">
+
+  <h1>NowhereDash</h1>
+
+  <p><strong>A focused control plane for Nowhere Portal infrastructure.</strong></p>
+  <p>Manage multiple OpenCtrl endpoints, operate Portal instances, inspect live telemetry, and publish private subscriptions from one dashboard.</p>
+
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/NodePassProject/NowhereDash" alt="License"></a>
+    <a href="https://github.com/NodePassProject/NowhereDash/releases"><img src="https://img.shields.io/github/v/release/NodePassProject/NowhereDash?include_prereleases" alt="Release"></a>
+    <a href="https://github.com/NodePassProject/NowhereDash/releases"><img src="https://img.shields.io/github/downloads/NodePassProject/NowhereDash/total.svg" alt="Downloads"></a>
+    <a href="https://github.com/NodePassProject/NowhereDash/pkgs/container/nowheredash"><img src="https://img.shields.io/badge/docker-ghcr.io%2Fnodepassproject%2Fnowheredash-blue?logo=docker&logoColor=white" alt="Docker image"></a>
+  </p>
+
+  <p>
+    <a href="#quick-start">Quick Start</a> ·
+    <a href="#portal-subscriptions">Subscriptions</a> ·
+    <a href="#documentation">Documentation</a> ·
+    <a href="#development">Development</a>
+  </p>
+
+  <p><strong>English</strong> · <a href="docs/zh-CN/README.md">简体中文</a></p>
 </div>
 
-**Language:** English | [简体中文](docs/zh-CN/README.md)
+NowhereDash ships as a single Go binary with an embedded React frontend. It uses Gin, GORM, and SQLite or PostgreSQL on the backend, with Vite, TypeScript, and HeroUI in the web application. Runtime state is delivered through SSE and WebSocket.
 
-![GitHub license](https://img.shields.io/github/license/NodePassProject/NowhereDash)
-![GitHub release](https://img.shields.io/github/v/release/NodePassProject/NowhereDash?include_prereleases)
-![GitHub downloads](https://img.shields.io/github/downloads/NodePassProject/NowhereDash/total.svg)
-![Docker image](https://img.shields.io/badge/docker-ghcr.io%2Fnodepassproject%2Fnowheredash-blue?logo=docker&logoColor=white)
+> [!IMPORTANT]
+> NowhereDash manages Nowhere Portal instances only. Legacy client/server modes, service assembly, and compatibility fields from earlier dashboard formats are intentionally unsupported.
 
-NowhereDash is a modern web dashboard for managing [Nowhere](https://github.com/NodePassProject/Nowhere) Portal instances through the [OpenCtrl](https://github.com/NodePassProject/OpenCtrl) master API. It ships as a single Go binary (Gin + GORM + SQLite/PostgreSQL) with an embedded React (Vite + TypeScript + HeroUI) frontend, and streams runtime state through SSE/WebSocket.
+## At a Glance
 
-This project is Portal-only. It does not include legacy client/server instance modes, service assembly, or compatibility fields from earlier dashboard formats.
+| Area                      | What NowhereDash provides                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Portal lifecycle**      | Create, edit, start, stop, restart, rename, sort, and monitor `portal://` instances.                                                  |
+| **OpenCtrl endpoints**    | Manage multiple OpenCtrl `/api/v2` endpoints from one dashboard.                                                                      |
+| **Complete editor**       | Configure network mode, TLS, certificates, ALPN, rate limits, dialing, SOCKS, next hop, carriers, pools, SNI, pinning, and log level. |
+| **Live operations**       | Stream status, traffic, connections, latency, and logs through SSE and WebSocket.                                                     |
+| **Operations data**       | Inspect runtime metrics, clean historical data, and compact SQLite during maintenance windows.                                        |
+| **Managed subscriptions** | Publish selected running Portals through token-authenticated feeds with expiry, traffic limits, previews, and token rotation.         |
+| **Security controls**     | Use the guided setup, password reset, OAuth2-only login, TLS, and subscription token rotation.                                        |
+| **Portable deployment**   | Run with Docker, systemd, or a standalone binary; initialize SQLite or PostgreSQL from the browser.                                   |
+| **Mobile workflows**      | Generate QR codes, `nowhere://` URLs, and `anywhere://add-proxy` import links.                                                        |
 
-## Highlights
-
-- **Portal-focused management**: create, edit, start, stop, restart, rename, sort, and monitor Nowhere `portal://` instances.
-- **OpenCtrl endpoint control**: manage multiple OpenCtrl `/api/v2` endpoints from one dashboard.
-- **Complete Portal editor**: handle network mode, TLS, certificates, ALPN, rate limits, dialing, SOCKS, next-hop, carriers, pools, SNI, pinning, and log level.
-- **Metadata preservation**: keep OpenCtrl `meta.tags` and `meta.peer` independent from the Portal URL.
-- **Portal import output**: generate a matching `nowhere://` URL and QR code for every Portal.
-- **Managed subscriptions**: publish selected running Portals through token-authenticated `/sub/portal?token=...` feeds.
-- **Real-time telemetry**: stream status, traffic, connection, latency, and log updates through SSE and WebSocket.
-- **Traffic and history tools**: view runtime metrics, clean historical data, and compact SQLite during maintenance windows.
-- **Portable runtime**: run as Docker, systemd service, or a standalone binary with an embedded frontend.
-- **Database choice**: initialize with SQLite or PostgreSQL from the web setup wizard.
-- **Security options**: built-in setup flow, password reset, OAuth2-only login mode, TLS flags, and token rotation for subscriptions.
-- **Mobile-friendly workflows**: QR code and `anywhere://add-proxy` helpers for importing into Anywhere.
+OpenCtrl metadata remains intact: `meta.tags` and `meta.peer` are stored independently from the Portal URL.
 
 ## Quick Start
 
-Run with Docker:
+Run the latest container:
 
 ```bash
-mkdir -p db logs && docker run -d --name nowheredash --restart unless-stopped -p 4000:4000 -v "$(pwd)/db:/app/db" -v "$(pwd)/logs:/app/logs" ghcr.io/nodepassproject/nowheredash:latest
+mkdir -p db logs
+
+docker run -d \
+  --name nowheredash \
+  --restart unless-stopped \
+  -p 4000:4000 \
+  -v "$(pwd)/db:/app/db" \
+  -v "$(pwd)/logs:/app/logs" \
+  ghcr.io/nodepassproject/nowheredash:latest
 ```
 
-Then open `http://localhost:4000`.
+Open [http://localhost:4000](http://localhost:4000).
 
-- **Docker:** [docs/en/DOCKER.md](docs/en/DOCKER.md)
-- **Binary + systemd:** [docs/en/BINARY.md](docs/en/BINARY.md)
-- **Development:** [docs/en/DEVELOPMENT.md](docs/en/DEVELOPMENT.md)
+> [!TIP]
+> On first start, the Setup wizard lets you choose SQLite or PostgreSQL, accept the compliance notice, and create the first administrator. It writes the resulting configuration to `.env`; restart the service afterward if your process manager does not do so automatically.
 
-On first start, NowhereDash enters Setup mode when no database configuration exists. Open the web UI, choose SQLite or PostgreSQL, accept the compliance notice, and create the first administrator. The setup wizard writes `.env`; restart the service after setup if your process manager does not do it automatically.
-
-## Documentation
-
-- **Migration Guide:** [MIGRATION.md](docs/en/MIGRATION.md)
-- **Docker Guide:** [DOCKER.md](docs/en/DOCKER.md)
-- **Binary Guide:** [BINARY.md](docs/en/BINARY.md)
-- **Development Guide:** [DEVELOPMENT.md](docs/en/DEVELOPMENT.md)
-- **Offline SQLite Compaction:** [SQLITE-MAINTENANCE.md](docs/en/SQLITE-MAINTENANCE.md)
-
-## Portal Configuration
-
-NowhereDash manages the current Nowhere Portal parameters:
-
-```text
-portal://<shared-key>@<listen-host>:<port>
-?net=mix|tcp|udp
-&tls=1|2
-&crt=...
-&key=...
-&alpn=...
-&rate=...
-&etar=...
-&dial=auto|IP
-&socks=none|endpoint
-&next=none|shared-key@host:port
-&up=tcp|udp
-&down=tcp|udp
-&pool=0..256
-&sni=...
-&pin=<lowercase SHA-256>
-&log=none|debug|info|warn|error|event
-```
-
-`socks` and `next` are mutually exclusive. Refer to the [official Nowhere configuration reference](https://github.com/NodePassProject/Nowhere/blob/main/docs/configuration.md) for runtime behavior and defaults.
-
-The generated Vector URL uses `127.0.0.1:1080` as its local SOCKS5 listener. When a Portal binds a wildcard address, NowhereDash uses the OpenCtrl endpoint hostname as the public Portal host.
+| Installation     | Guide                                       | Recommended for                 |
+| ---------------- | ------------------------------------------- | ------------------------------- |
+| Docker           | [Docker guide](docs/en/DOCKER.md)           | Containers and quick evaluation |
+| Binary + systemd | [Binary guide](docs/en/BINARY.md)           | Long-running Linux hosts        |
+| Source           | [Development guide](docs/en/DEVELOPMENT.md) | Contributors and custom builds  |
 
 ## Portal Subscriptions
 
-The Subscription menu publishes selected existing Portals through `/sub/portal?token=...`. The response is generated from current, running Portal data on every pull and contains one or more `nowhere://` URLs. Portal imports and subscriptions use the same URL scheme.
+The Subscription menu publishes selected Portals through `/sub/portal?token=...`. Every request is rendered from the current running Portal state and returns one or more `nowhere://` URLs.
 
-Subscriptions support expiry, traffic limits, carrier preferences, traffic reset, content preview, token rotation, and one-click import into Anywhere through `anywhere://add-proxy`. A subscription URL is a bearer secret: deploy it over HTTPS and redact its `token` query parameter in reverse-proxy, CDN, and observability logs.
+Subscriptions support expiry, traffic limits, carrier preferences, traffic reset, content preview, token rotation, light/dark icons, and one-click Anywhere import through `anywhere://add-proxy`.
 
-## CLI Flags
+> [!WARNING]
+> A subscription URL is a bearer secret. Use HTTPS in production and redact its `token` query parameter from reverse-proxy, CDN, and observability logs.
+
+## Configuration
+
+<details>
+<summary><strong>Common CLI flags</strong></summary>
 
 ```bash
 ./nowheredash --help
@@ -101,7 +98,16 @@ Subscriptions support expiry, traffic limits, carrier preferences, traffic reset
 ./nowheredash --resetpwd
 ```
 
-Common environment variables include `PORT`, `LOG-LEVEL`, `TLS_CERT`, `TLS_KEY`, `DISABLE_LOGIN`, `SSE_DEBUG_LOG`, `DISABLE_SSE_LOG`, `DEMO_MODE`, `DB_DRIVER`, `DB_PATH`, and the `PG_*` PostgreSQL variables written by the setup wizard.
+</details>
+
+Common environment variables:
+
+| Group          | Variables                                                                 |
+| -------------- | ------------------------------------------------------------------------- |
+| Server         | `PORT`, `LOG-LEVEL`, `TLS_CERT`, `TLS_KEY`                                |
+| Authentication | `DISABLE_LOGIN`                                                           |
+| Runtime        | `SSE_DEBUG_LOG`, `DISABLE_SSE_LOG`, `DEMO_MODE`                           |
+| Database       | `DB_DRIVER`, `DB_PATH`, and the `PG_*` values written by the Setup wizard |
 
 ## Development
 
@@ -113,41 +119,51 @@ corepack enable
 corepack prepare pnpm@10.23.0 --activate
 pnpm install --frozen-lockfile
 pnpm build
+
 cd ..
 go run ./cmd/server
 ```
 
-Run backend tests:
+Validation and local frontend development:
 
 ```bash
 go test ./...
-```
 
-Run the frontend during development:
-
-```bash
 cd web
 pnpm dev
 ```
 
-## Data Compatibility
+## Documentation
 
-NowhereDash uses a Portal-only schema and backup format. Legacy dashboard tunnel fields and service records are intentionally unsupported. Recreate existing instances as Nowhere Portal instances or import a NowhereDash Portal-only backup.
+| Topic                         | Guide                                                  |
+| ----------------------------- | ------------------------------------------------------ |
+| Deployment with Docker        | [DOCKER.md](docs/en/DOCKER.md)                         |
+| Binary and systemd deployment | [BINARY.md](docs/en/BINARY.md)                         |
+| Development environment       | [DEVELOPMENT.md](docs/en/DEVELOPMENT.md)               |
+| Migration                     | [MIGRATION.md](docs/en/MIGRATION.md)                   |
+| Offline SQLite compaction     | [SQLITE-MAINTENANCE.md](docs/en/SQLITE-MAINTENANCE.md) |
 
-## License
+## Compatibility
 
-GNU General Public License v3.0. See [LICENSE](LICENSE).
+NowhereDash uses a Portal-only schema and backup format. Recreate legacy dashboard instances as Nowhere Portal instances, or import a NowhereDash Portal-only backup.
 
-## Disclaimer
+## License and Support
+
+NowhereDash is licensed under the [GNU General Public License v3.0](LICENSE).
+
+| Resource | Link                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------- |
+| Issues   | [NodePassProject/NowhereDash/issues](https://github.com/NodePassProject/NowhereDash/issues) |
+| Nowhere  | [NodePassProject/Nowhere](https://github.com/NodePassProject/Nowhere)                       |
+| OpenCtrl | [NodePassProject/OpenCtrl](https://github.com/NodePassProject/OpenCtrl)                     |
+
+<details>
+<summary><strong>Disclaimer</strong></summary>
 
 This project is provided "as is", without any express or implied warranties. You are responsible for complying with local laws and regulations and using it only for lawful purposes. The authors are not liable for any direct, indirect, incidental, or consequential damages. The authors reserve the right to modify features and this statement at any time.
 
-## Support
+</details>
 
-- Issues: https://github.com/NodePassProject/NowhereDash/issues
-- Nowhere: https://github.com/NodePassProject/Nowhere
-- OpenCtrl: https://github.com/NodePassProject/OpenCtrl
-
----
-
-Copyright 2026 NodePassProject.
+<div align="center">
+  <sub>Copyright 2026 NodePassProject.</sub>
+</div>

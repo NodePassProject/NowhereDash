@@ -12,7 +12,6 @@
     "columns": {
       "id": "ID",
       "name": "Name",
-      "version": "Version",
       "url": "URL",
       "apiKey": "API Key",
       "status": "Status",
@@ -135,7 +134,6 @@
     "importedName": "Imported Node",
     "testResultTitle": "Connection Test Result",
     "connectionStatus": "Connection Status",
-    "endpointVersion": "Node Version",
     "canAdd": "Can Add",
     "statusSuccess": "Success",
     "statusFailed": "Failed",
@@ -194,10 +192,9 @@
     "validateColumns": {
       "name": "Name",
       "url": "URL",
-      "version": "Version",
       "status": "Status"
     },
-    "validateNote": "Note: Only nodes with version ≥ 1.10.0 will be imported. Lower versions or failed connections will be automatically skipped. Drag rows to adjust import order.",
+    "validateNote": "Note: Incompatible or unreachable nodes will be skipped automatically. Drag rows to adjust import order.",
     "confirmImport": "Confirm Import",
     "importing": "Importing...",
     "importSuccess": "✓ Importable",
@@ -321,6 +318,7 @@
       "clearLogs": "Clear Logs",
       "backupInstances": "Backup Tunnels",
       "restoreInstances": "Restore Tunnels",
+      "uninstall": "Uninstall Node",
       "delete": "Delete Node",
       "sections": {
         "instances": "Tunnels",
@@ -329,7 +327,7 @@
         "data": "Data",
         "dangerZone": "Danger Zone"
       },
-      "dangerHint": "This action cannot be undone — confirm carefully"
+      "dangerHint": "Confirm whether you want to uninstall the node service or remove its dashboard record"
     },
     "info": {
       "title": "Node Information",
@@ -454,6 +452,17 @@
         "cancel": "Cancel",
         "confirm": "Confirm Clear"
       },
+      "uninstallCommand": {
+        "title": "Uninstall Node",
+        "warning": "Run this command in an administrator terminal on the node host. It stops the service and permanently removes OpenCtrl, Nowhere, node state, the API key, configuration, and certificates.",
+        "platformLabel": "Node operating system",
+        "unix": "Linux / macOS",
+        "windows": "Windows",
+        "commandLabel": "Uninstall command",
+        "cancel": "Close",
+        "copy": "Copy Command",
+        "copied": "Node uninstall command copied to the clipboard"
+      },
       "deleteEndpoint": {
         "title": "Delete Node",
         "warningTitle": "⚠️ Dangerous Operation",
@@ -569,7 +578,7 @@
       "connected": "Connected, waiting for data...",
       "unavailable": "System monitor charts unavailable",
       "osNotSupported": "OS not supported (Current: {{current}}, Required: Linux)",
-      "versionNotSupported": "Version not supported (Current: {{current}}, Required: >=1.6.0)"
+      "capabilityNotSupported": "This node does not support system monitoring"
     },
     "sseDebug": {
       "button": "SSE Debug",

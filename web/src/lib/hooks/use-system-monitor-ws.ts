@@ -15,7 +15,6 @@ export interface SystemMonitorData {
   diskr?: number; // 磁盘读取流量（字节）
   diskw?: number; // 磁盘写入流量（字节）
   sysup?: number; // 系统运行时间（秒）
-  ver?: string; // 版本信息
   uptime?: number; // 应用运行时间
   // 新增字段，用于计算
   mem_total?: number; // 总内存（字节）
@@ -145,7 +144,6 @@ export function useSystemMonitorWS(
               timestamp: new Date(data.timestamp).getTime(),
               os: info.os,
               arch: info.arch,
-              ver: info.ver,
               uptime: info.uptime,
               sysup: info.sysup,
               // CPU使用率
@@ -208,7 +206,6 @@ export function useSystemMonitorWS(
               timestamp: Date.now(),
               os: data.os,
               arch: data.arch,
-              ver: data.ver,
               uptime: data.uptime,
               sysup: data.sysup,
               // CPU使用率

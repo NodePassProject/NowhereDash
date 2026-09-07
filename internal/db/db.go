@@ -409,7 +409,7 @@ func StandardMigrate(db *gorm.DB) error {
 	}
 
 	// 按照依赖关系顺序迁移表
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		// 基础表
 		&models.Endpoint{},
 		&models.SystemConfig{},
@@ -428,7 +428,26 @@ func StandardMigrate(db *gorm.DB) error {
 		&models.TrafficHourlySummary{},
 		&models.DashboardTrafficSummary{},
 		&models.ServiceHistory{},
-	)
+	); err != nil {
+		return err
+	}
+
+	return migrateLegacyTunnelPoolToMux(db)
+}
+
+// migrateLegacyTunnelPoolToMux preserves the effective 1.7.x setting after
+// AutoMigrate adds the 1.8 mux column. Explicit mux values always win.
+func migrateLegacyTunnelPoolToMux(db *gorm.DB) error {
+	tunnel := &models.Tunnel{}
+	if !db.Migrator().HasTable(tunnel) ||
+		!db.Migrator().HasColumn(tunnel, "pool_size") ||
+		!db.Migrator().HasColumn(tunnel, "mux") {
+		return nil
+	}
+
+	return db.Table(tunnel.TableName()).
+		Where("mux IS NULL OR mux = ''").
+		Update("mux", gorm.Expr("CASE WHEN pool_size > ? THEN ? ELSE ? END", 0, "1", "0")).Error
 }
 
 // dropLegacySubscriptionEnabledColumn removes the retired subscription toggle

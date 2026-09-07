@@ -54,7 +54,6 @@ type EndpointResponse struct {
 type NowhereInfo struct {
 	OS     string `json:"os"`
 	Arch   string `json:"arch"`
-	Ver    string `json:"ver"`
 	Name   string `json:"name"`
 	Log    string `json:"log"`
 	TLS    string `json:"tls"`

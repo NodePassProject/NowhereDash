@@ -41,7 +41,7 @@ func SetupSSERoutes(rg *gin.RouterGroup, sseService *sse.Service, sseManager *ss
 	rg.GET("/sse/tunnel/:tunnelId", sseHandler.HandleTunnelSSE)                    // 实例详情页用
 	rg.GET("/sse/nowhere-proxy", sseHandler.HandleNowhereSSEProxy)                 // 主控详情页代理用
 	rg.POST("/sse/test", sseHandler.HandleTestSSEEndpoint)                         // 添加主控的时候 测试sse是否通用
-	rg.POST("/sse/test-with-version", sseHandler.HandleTestSSEEndpointWithVersion) // 添加主控时 检测连接并获取版本信息
+	rg.POST("/sse/test-compatibility", sseHandler.HandleTestEndpointCompatibility) // 添加主控时检测连接与兼容性
 
 	// 日志清理相关路由
 	rg.GET("/sse/log-cleanup/stats", sseHandler.HandleLogCleanupStats)
@@ -340,8 +340,8 @@ func (h *SSEHandler) HandleTriggerLogCleanup(c *gin.Context) {
 	})
 }
 
-// HandleTestSSEEndpointWithVersion 测试端点SSE连接并获取版本信息
-func (h *SSEHandler) HandleTestSSEEndpointWithVersion(c *gin.Context) {
+// HandleTestEndpointCompatibility 测试端点连接并检查兼容性。
+func (h *SSEHandler) HandleTestEndpointCompatibility(c *gin.Context) {
 	// 解析请求体
 	var req struct {
 		URL     string `json:"url"`
@@ -360,7 +360,7 @@ func (h *SSEHandler) HandleTestSSEEndpointWithVersion(c *gin.Context) {
 		return
 	}
 
-	// 先用 /info 验证普通 API 和版本。/events 可能因为 Nowhere 当前 SSE 不可用返回 503,
+	// 先用 /info 验证普通 API 和兼容性。/events 可能因为 Nowhere 当前 SSE 不可用返回 503,
 	// 但这不应该阻断新增主控。
 	tempEndpointID := int64(-1)
 	baseURL := nowhere.BuildAPIBaseURL(req.URL, req.APIPath)
@@ -369,19 +369,17 @@ func (h *SSEHandler) HandleTestSSEEndpointWithVersion(c *gin.Context) {
 
 	info, err := nowhere.GetInfo(tempEndpointID)
 	if err != nil {
-		log.Warnf("[SSE] 获取版本信息失败: %v", err)
+		log.Warnf("[SSE] 获取兼容性信息失败: %v", err)
 		c.JSON(http.StatusOK, gin.H{
 			"success":   true,
 			"connected": true,
-			"version":   "unknown",
 			"canAdd":    false,
-			"message":   "Connected failed or cannot get version info, possibly an older version controller (< 1.10.0)",
+			"message":   "The controller is reachable but is not compatible with this dashboard",
 		})
 		return
 	}
 
-	version := info.Ver
-	canAdd := compareVersion(version, "1.10.0")
+	canAdd := nowhere.VersionAtLeast(info.Ver, "1.10.0")
 
 	sseStatus := "unknown"
 	sseError := ""
@@ -420,62 +418,14 @@ func (h *SSEHandler) HandleTestSSEEndpointWithVersion(c *gin.Context) {
 		}
 	}
 
-	// message := ""
-	// if !canAdd {
-	// 	message = fmt.Sprintf("主控版本 %s 低于 1.10.0，不支持添加", version)
-	// }
-	// } else {
-	// 	message = fmt.Sprintf("主控版本 %s，支持添加", version)
-	// }
-
 	// 成功返回
 	c.JSON(http.StatusOK, gin.H{
 		"success":   true,
 		"connected": true,
-		"version":   version,
 		"canAdd":    canAdd,
 		"sseStatus": sseStatus,
 		"sseError":  sseError,
-		// "message":   message,
 	})
-}
-
-// compareVersion 比较版本号，返回 actual >= required
-func compareVersion(actual, required string) bool {
-	// 简单的版本比较实现
-	// 支持格式：1.10.0, v1.10.0
-	actual = strings.TrimPrefix(actual, "v")
-	required = strings.TrimPrefix(required, "v")
-
-	actualParts := strings.Split(actual, ".")
-	requiredParts := strings.Split(required, ".")
-
-	// 补齐长度
-	for len(actualParts) < len(requiredParts) {
-		actualParts = append(actualParts, "0")
-	}
-	for len(requiredParts) < len(actualParts) {
-		requiredParts = append(requiredParts, "0")
-	}
-
-	// 逐位比较
-	for i := 0; i < len(actualParts); i++ {
-		actualNum := 0
-		requiredNum := 0
-
-		// 解析数字（忽略错误，默认为0）
-		fmt.Sscanf(actualParts[i], "%d", &actualNum)
-		fmt.Sscanf(requiredParts[i], "%d", &requiredNum)
-
-		if actualNum > requiredNum {
-			return true
-		} else if actualNum < requiredNum {
-			return false
-		}
-		// 相等则继续比较下一位
-	}
-
-	return true // 完全相等，返回 true
 }
 
 // HandleNowhereSSEProxy 代理连接到Nowhere主控的SSE

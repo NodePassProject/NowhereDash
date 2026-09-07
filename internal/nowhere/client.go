@@ -477,6 +477,40 @@ type EndpointInfoResult struct {
 	Alias     string `json:"alias"`      // 端点别名
 }
 
+// MarshalJSON keeps the controller version available internally while omitting
+// it from dashboard APIs and WebSocket payloads.
+func (r EndpointInfoResult) MarshalJSON() ([]byte, error) {
+	type publicEndpointInfo struct {
+		OS        string `json:"os"`
+		Arch      string `json:"arch"`
+		Name      string `json:"name"`
+		Log       string `json:"log"`
+		TLS       string `json:"tls"`
+		Crt       string `json:"crt"`
+		Key       string `json:"key"`
+		CPU       int    `json:"cpu"`
+		MemUsed   int64  `json:"mem_used"`
+		MemTotal  int64  `json:"mem_total"`
+		SwapUsed  int64  `json:"swap_used"`
+		SwapTotal int64  `json:"swap_total"`
+		DiskRead  int64  `json:"diskr"`
+		DiskWrite int64  `json:"diskw"`
+		NetRx     int64  `json:"netrx"`
+		NetTx     int64  `json:"nettx"`
+		SysUptime int64  `json:"sysup"`
+		Uptime    int64  `json:"uptime"`
+		Alias     string `json:"alias"`
+	}
+
+	return json.Marshal(publicEndpointInfo{
+		OS: r.OS, Arch: r.Arch, Name: r.Name, Log: r.Log, TLS: r.TLS,
+		Crt: r.Crt, Key: r.Key, CPU: r.CPU, MemUsed: r.MemUsed,
+		MemTotal: r.MemTotal, SwapUsed: r.SwapUsed, SwapTotal: r.SwapTotal,
+		DiskRead: r.DiskRead, DiskWrite: r.DiskWrite, NetRx: r.NetRx,
+		NetTx: r.NetTx, SysUptime: r.SysUptime, Uptime: r.Uptime, Alias: r.Alias,
+	})
+}
+
 // TCPingResult 表示TCP连接测试的结果
 type TCPingResult struct {
 	Target    string `json:"target"`

@@ -294,8 +294,8 @@ func (s *EndpointShared) UpdateInfo(id int64, info nowhere.EndpointInfoResult) {
 	// 标记为脏数据
 	s.MarkDirty(id)
 
-	log.Debugf("[EndpointCache] 更新端点系统信息: ID=%d, OS=%s, Arch=%s, Ver=%s",
-		id, info.OS, info.Arch, info.Ver)
+	log.Debugf("[EndpointCache] 更新端点系统信息: ID=%d, OS=%s, Arch=%s",
+		id, info.OS, info.Arch)
 }
 
 // UpdateField 通用字段更新方法

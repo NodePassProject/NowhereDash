@@ -29,12 +29,11 @@ type TunnelQueryParams struct {
 
 type TunnelWithStats struct {
 	models.Tunnel
-	TotalRx         int64  `json:"totalRx"`
-	TotalTx         int64  `json:"totalTx"`
-	EndpointName    string `json:"endpoint"`
-	EndpointVersion string `json:"version,omitempty"`
-	PortalHost      string `json:"portalHost"`
-	VectorURL       string `json:"vectorUrl,omitempty"`
+	TotalRx      int64  `json:"totalRx"`
+	TotalTx      int64  `json:"totalTx"`
+	EndpointName string `json:"endpoint"`
+	PortalHost   string `json:"portalHost"`
+	VectorURL    string `json:"vectorUrl,omitempty"`
 }
 
 type TunnelListResult struct {
@@ -65,7 +64,7 @@ type PortalRequest struct {
 	Next        string             `json:"next"`
 	Up          string             `json:"up"`
 	Down        string             `json:"down"`
-	PoolSize    *int64             `json:"poolSize"`
+	Mux         string             `json:"mux"`
 	Sni         string             `json:"sni"`
 	Pin         string             `json:"pin"`
 	LogLevel    LogLevel           `json:"logLevel"`

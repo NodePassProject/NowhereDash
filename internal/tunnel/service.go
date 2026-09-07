@@ -85,7 +85,7 @@ func portalFromRequest(req PortalRequest) models.Tunnel {
 		Next:           stringPointer(req.Next),
 		Up:             stringPointer(req.Up),
 		Down:           stringPointer(req.Down),
-		PoolSize:       req.PoolSize,
+		Mux:            stringPointer(req.Mux),
 		Sni:            stringPointer(req.Sni),
 		Pin:            stringPointer(req.Pin),
 		LogLevel:       models.LogLevel(req.LogLevel),
@@ -156,7 +156,7 @@ var createdPortalAssignmentColumns = []string{
 	"next",
 	"up",
 	"down",
-	"pool_size",
+	"mux",
 	"sni",
 	"pin",
 	"sorts",
@@ -254,7 +254,7 @@ func (s *Service) CreatePortalURL(endpointID int64, rawURL, name string) (*model
 		TLSMode: parsed.TLSMode, CertPath: value(parsed.CertPath), KeyPath: value(parsed.KeyPath),
 		ALPN: value(parsed.ALPN), Rate: parsed.Rate, Etar: parsed.Etar, Dial: value(parsed.Dial),
 		Socks: value(parsed.Socks), Next: value(parsed.Next), Up: value(parsed.Up), Down: value(parsed.Down),
-		PoolSize: parsed.PoolSize, Sni: value(parsed.Sni), Pin: value(parsed.Pin), LogLevel: parsed.LogLevel,
+		Mux: value(parsed.Mux), Sni: value(parsed.Sni), Pin: value(parsed.Pin), LogLevel: parsed.LogLevel,
 		EnableStore: true,
 	}
 	return s.CreatePortal(request)
@@ -372,7 +372,7 @@ func (s *Service) GetTunnelsWithPagination(params TunnelQueryParams) (*TunnelLis
 		sortOrder = "ASC"
 	}
 	var rows []TunnelWithStats
-	err := query.Select("tunnels.*, (tunnels.tcp_rx + tunnels.udp_rx) AS total_rx, (tunnels.tcp_tx + tunnels.udp_tx) AS total_tx, endpoints.name AS endpoint_name, COALESCE(endpoints.ver, '') AS endpoint_version, endpoints.hostname AS portal_host").
+	err := query.Select("tunnels.*, (tunnels.tcp_rx + tunnels.udp_rx) AS total_rx, (tunnels.tcp_tx + tunnels.udp_tx) AS total_tx, endpoints.name AS endpoint_name, endpoints.hostname AS portal_host").
 		Joins("LEFT JOIN endpoints ON endpoints.id = tunnels.endpoint_id").
 		Order(sortColumn + " " + sortOrder + ", tunnels.id DESC").
 		Offset((params.Page - 1) * params.PageSize).Limit(params.PageSize).Scan(&rows).Error

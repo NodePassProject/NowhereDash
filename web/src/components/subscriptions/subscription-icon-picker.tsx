@@ -18,7 +18,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-const DEFAULT_ICON_URL = "/nowhere-icon.png";
+import { SubscriptionIcon } from "./subscription-icon";
+
 const ICON_SIZE = 96;
 const PREVIEW_SIZE = 280;
 const MAX_INPUT_SIZE = 5 * 1024 * 1024;
@@ -301,14 +302,22 @@ export default function SubscriptionIconPicker({
               type="button"
               onClick={() => inputRef.current?.click()}
             >
-              <img
-                alt={t("fields.icon")}
-                className="size-full object-cover"
-                src={value || DEFAULT_ICON_URL}
-              />
-              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                <Icon icon="lucide:upload" width={22} />
-              </span>
+              {value ? (
+                <>
+                  <SubscriptionIcon
+                    alt={t("fields.icon")}
+                    className="size-full"
+                    icon={value}
+                  />
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <Icon icon="lucide:upload" width={22} />
+                  </span>
+                </>
+              ) : (
+                <span className="flex size-full items-center justify-center bg-default-50 text-default-400 transition-colors group-hover:bg-primary-50 group-hover:text-primary dark:group-hover:bg-primary-950/30">
+                  <Icon icon="lucide:upload" width={24} />
+                </span>
+              )}
             </button>
             {value && (
               <Tooltip content={t("form.resetIcon")}>

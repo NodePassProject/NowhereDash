@@ -6,25 +6,26 @@ import (
 
 // Endpoint 端点表 - GORM模型
 type Endpoint struct {
-	ID          int64          `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
-	Name        string         `json:"name" gorm:"type:text;uniqueIndex;not null;column:name"`
-	URL         string         `json:"url" gorm:"type:text;uniqueIndex;not null;column:url"`
-	Hostname    string         `json:"hostname" gorm:"type:text;column:hostname"`
-	APIPath     string         `json:"apiPath" gorm:"type:text;not null;column:api_path"`
-	APIKey      string         `json:"apiKey" gorm:"type:text;not null;column:api_key"`
-	Status      EndpointStatus `json:"status" gorm:"type:text;default:'OFFLINE';column:status"`
-	OS          *string        `json:"os,omitempty" gorm:"type:text;column:os"`
-	Arch        *string        `json:"arch,omitempty" gorm:"type:text;column:arch"`
-	Ver         *string        `json:"ver,omitempty" gorm:"type:text;column:ver"`
-	Log         *string        `json:"log,omitempty" gorm:"type:text;column:log"`
-	TLS         *string        `json:"tls,omitempty" gorm:"type:text;column:tls"`
-	Crt         *string        `json:"crt,omitempty" gorm:"type:text;column:crt"`
-	TunnelCount int64          `json:"tunnelCount,omitempty" gorm:"default:0;column:tunnel_count"`
-	KeyPath     *string        `json:"keyPath,omitempty" gorm:"type:text;column:key_path"`
-	Uptime      *int64         `json:"uptime,omitempty" gorm:"column:uptime"`
-	LastCheck   time.Time      `json:"lastCheck" gorm:"column:last_check"`
-	CreatedAt   time.Time      `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
-	UpdatedAt   time.Time      `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
+	ID                    int64          `json:"id" gorm:"primaryKey;autoIncrement;column:id"`
+	Name                  string         `json:"name" gorm:"type:text;uniqueIndex;not null;column:name"`
+	URL                   string         `json:"url" gorm:"type:text;uniqueIndex;not null;column:url"`
+	Hostname              string         `json:"hostname" gorm:"type:text;column:hostname"`
+	APIPath               string         `json:"apiPath" gorm:"type:text;not null;column:api_path"`
+	APIKey                string         `json:"apiKey" gorm:"type:text;not null;column:api_key"`
+	Status                EndpointStatus `json:"status" gorm:"type:text;default:'OFFLINE';column:status"`
+	OS                    *string        `json:"os,omitempty" gorm:"type:text;column:os"`
+	Arch                  *string        `json:"arch,omitempty" gorm:"type:text;column:arch"`
+	Ver                   *string        `json:"-" gorm:"type:text;column:ver"`
+	SupportsSystemMonitor bool           `json:"supportsSystemMonitor,omitempty" gorm:"-"`
+	Log                   *string        `json:"log,omitempty" gorm:"type:text;column:log"`
+	TLS                   *string        `json:"tls,omitempty" gorm:"type:text;column:tls"`
+	Crt                   *string        `json:"crt,omitempty" gorm:"type:text;column:crt"`
+	TunnelCount           int64          `json:"tunnelCount,omitempty" gorm:"default:0;column:tunnel_count"`
+	KeyPath               *string        `json:"keyPath,omitempty" gorm:"type:text;column:key_path"`
+	Uptime                *int64         `json:"uptime,omitempty" gorm:"column:uptime"`
+	LastCheck             time.Time      `json:"lastCheck" gorm:"column:last_check"`
+	CreatedAt             time.Time      `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
+	UpdatedAt             time.Time      `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
 
 	// 关联
 	Tunnels []Tunnel `json:"tunnels,omitempty" gorm:"foreignKey:EndpointID"`
@@ -81,17 +82,17 @@ type Tunnel struct {
 	Peer       *Peer              `json:"peer,omitempty" gorm:"type:text;serializer:json;column:peer"`
 
 	// Nowhere Portal configuration.
-	Network  *string `json:"network,omitempty" gorm:"type:text;column:network"`
-	ALPN     *string `json:"alpn,omitempty" gorm:"type:text;column:alpn"`
-	Etar     *int64  `json:"etar,omitempty" gorm:"type:int;column:etar"`
-	Dial     *string `json:"dial,omitempty" gorm:"type:text;column:dial"`
-	Socks    *string `json:"socks,omitempty" gorm:"type:text;column:socks"`
-	Next     *string `json:"next,omitempty" gorm:"type:text;column:next"`
-	Up       *string `json:"up,omitempty" gorm:"type:text;column:up"`
-	Down     *string `json:"down,omitempty" gorm:"type:text;column:down"`
-	PoolSize *int64  `json:"poolSize,omitempty" gorm:"type:int;column:pool_size"`
-	Sni      *string `json:"sni,omitempty" gorm:"type:text;column:sni"`
-	Pin      *string `json:"pin,omitempty" gorm:"type:text;column:pin"`
+	Network *string `json:"network,omitempty" gorm:"type:text;column:network"`
+	ALPN    *string `json:"alpn,omitempty" gorm:"type:text;column:alpn"`
+	Etar    *int64  `json:"etar,omitempty" gorm:"type:int;column:etar"`
+	Dial    *string `json:"dial,omitempty" gorm:"type:text;column:dial"`
+	Socks   *string `json:"socks,omitempty" gorm:"type:text;column:socks"`
+	Next    *string `json:"next,omitempty" gorm:"type:text;column:next"`
+	Up      *string `json:"up,omitempty" gorm:"type:text;column:up"`
+	Down    *string `json:"down,omitempty" gorm:"type:text;column:down"`
+	Mux     *string `json:"mux,omitempty" gorm:"type:text;column:mux"`
+	Sni     *string `json:"sni,omitempty" gorm:"type:text;column:sni"`
+	Pin     *string `json:"pin,omitempty" gorm:"type:text;column:pin"`
 
 	Sorts int64 `json:"sorts" gorm:"type:int;column:sorts;default:0"`
 

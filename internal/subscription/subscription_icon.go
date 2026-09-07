@@ -16,13 +16,19 @@ const (
 
 var errInvalidSubscriptionIcon = errors.New("icon must be a square 96x96 PNG no larger than 32 KiB")
 
-// defaultSubscriptionIconPNG is embedded so public subscription responses work
-// from the packaged server binary without frontend filesystem access.
+// The 96x96 defaults are derived from web/public/logo*.png so public
+// subscription responses work from the packaged binary without frontend access.
 //
-//go:embed nowhere-icon.png
-var defaultSubscriptionIconPNG []byte
+//go:embed logo.png
+var defaultSubscriptionIconLightPNG []byte
 
-var defaultSubscriptionIconBase64 = base64.StdEncoding.EncodeToString(defaultSubscriptionIconPNG)
+//go:embed logo-dark.png
+var defaultSubscriptionIconDarkPNG []byte
+
+var (
+	defaultSubscriptionIconLightBase64 = base64.StdEncoding.EncodeToString(defaultSubscriptionIconLightPNG)
+	defaultSubscriptionIconDarkBase64  = base64.StdEncoding.EncodeToString(defaultSubscriptionIconDarkPNG)
+)
 
 func decodeSubscriptionIcon(value string) ([]byte, error) {
 	value = strings.TrimSpace(value)
@@ -53,14 +59,15 @@ func decodeSubscriptionIcon(value string) ([]byte, error) {
 
 func subscriptionIconDataURL(icon []byte) string {
 	if len(icon) == 0 {
-		return "/nowhere-icon.png"
+		return "/logo.png"
 	}
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(icon)
 }
 
-func subscriptionIconBase64(icon []byte) string {
+func subscriptionIconBase64Pair(icon []byte) (light string, dark string) {
 	if len(icon) == 0 {
-		return defaultSubscriptionIconBase64
+		return defaultSubscriptionIconLightBase64, defaultSubscriptionIconDarkBase64
 	}
-	return base64.StdEncoding.EncodeToString(icon)
+	encoded := base64.StdEncoding.EncodeToString(icon)
+	return encoded, encoded
 }

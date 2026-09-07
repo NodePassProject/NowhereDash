@@ -1,23 +1,24 @@
 # 统一二进制部署
 
-`scripts/install.sh` 可以部署 NowhereDash，也可以部署由 OpenCtrl 管理的 Nowhere 节点。
+`scripts/install.sh` 可以在 Linux/macOS 上部署组件，`scripts/install.ps1` 用于 Windows。安装目标可以是 NowhereDash，也可以是由 OpenCtrl 管理的 Nowhere 节点。
 
-| 安装目标 | 安装内容 | 服务 |
-| --- | --- | --- |
-| `dash` | NowhereDash | `nowheredash.service` |
-| `nowhere` / `openctrl` | OpenCtrl + Nowhere 运行时 | `openctrl.service` |
-| `all` | 上述全部组件 | 两个服务 |
+| 安装目标 | 安装内容 |
+| --- | --- |
+| `dash` | NowhereDash |
+| `nowhere` / `openctrl` | OpenCtrl + Nowhere 运行时 |
+| `all` | 上述全部组件 |
 
 `nowhere` 与 `openctrl` 是同一个安装目标。该目标不会创建固定的单 Portal 服务；OpenCtrl 将 Nowhere 作为运行时，之后由 NowhereDash 通过 OpenCtrl API 创建和管理 Portal/Vector 实例。
 
 ## 环境要求
 
-- 使用 systemd 的 Linux，需要 root 权限。
-- 节点支持 x86_64 和 arm64，并自动选择 glibc 或 musl Release。
-- Dash 的具体架构以 NowhereDash Releases 为准。
+- Linux：使用 systemd，需要 root 权限；节点支持 x86_64 和 arm64。
+- Linux 节点始终下载静态链接的 `unknown-linux-musl` 版 Nowhere，不依赖宿主机 glibc 版本。
+- macOS：当前仅支持 Apple Silicon (arm64) 节点，使用 launchd，需要 root 权限。NowhereDash 暂无 macOS Release。
+- Windows：当前支持 x86_64 节点和 Dash，使用管理员 PowerShell 和 Windows 计划任务。
 - 服务器需要能够访问 GitHub Releases。
 
-脚本会安装缺少的基础工具，并为两个服务创建独立的非登录用户。
+Linux 脚本会安装缺少的基础工具，并为服务创建独立的非登录用户。macOS 节点使用系统 `nobody` 账户，Windows 任务使用 `SYSTEM` 账户。
 
 ## 下载安装器
 
@@ -34,6 +35,16 @@ sudo /tmp/nowheredash-install.sh --help
 
 ```bash
 sudo /tmp/nowheredash-install.sh
+```
+
+Windows 使用原生 PowerShell 安装器：
+
+```powershell
+Invoke-WebRequest `
+  https://raw.githubusercontent.com/NodePassProject/NowhereDash/main/scripts/install.ps1 `
+  -OutFile $env:TEMP\nowheredash-install.ps1
+Set-ExecutionPolicy -Scope Process Bypass
+& $env:TEMP\nowheredash-install.ps1 status all
 ```
 
 ## 安装 Nowhere + OpenCtrl
@@ -73,6 +84,35 @@ sudo /tmp/nowheredash-install.sh install nowhere \
 ```
 
 `--openctrl-tls 0` 会使用明文 HTTP，只适合可信内网或前置 TLS 反向代理。脚本不会申请证书，也不会停止现有 Web 服务。
+
+### macOS Apple Silicon
+
+macOS 使用同一个 Bash 安装器，自动匹配 `openctrl_*_darwin_arm64.tar.gz` 与 `nowhere-aarch64-apple-darwin.tar.gz`，并注册 `/Library/LaunchDaemons/com.nodepass.openctrl.plist`：
+
+```bash
+sudo /tmp/nowheredash-install.sh install nowhere \
+  --openctrl-public-host node.example.com
+sudo nowhere-ctl status
+```
+
+launchd 以非特权账户运行节点，因此 macOS 上的 OpenCtrl 端口必须不小于 1024。Intel Mac 和 macOS 上的 Dash 会得到明确的不支持提示，因为当前 Nowhere/NowhereDash Release 没有相应产物。
+
+### Windows x86_64
+
+在管理员 PowerShell 中安装节点。安装器会匹配 `openctrl_*_windows_amd64.tar.gz` 与 `nowhere-x86_64-pc-windows-msvc.zip`，并创建开机启动的 `OpenCtrl` 计划任务：
+
+```powershell
+& $env:TEMP\nowheredash-install.ps1 install nowhere `
+  -OpenCtrlPublicHost node.example.com
+& $env:TEMP\nowheredash-install.ps1 status nowhere
+```
+
+Windows 上安装 Dash：
+
+```powershell
+& $env:TEMP\nowheredash-install.ps1 install dash -DashPort 4000
+& $env:TEMP\nowheredash-install.ps1 update all
+```
 
 安装成功后会输出与 npsh 相同类型的连接信息：
 
@@ -186,6 +226,13 @@ sudo /tmp/nowheredash-install.sh status all
 
 更新会保留配置和数据。新服务未通过启动/API 检查时，脚本会尝试恢复上一版二进制。
 
+Windows 使用相同的 `update`、`status`、`uninstall` 动作，例如：
+
+```powershell
+& $env:TEMP\nowheredash-install.ps1 update nowhere
+& $env:TEMP\nowheredash-install.ps1 uninstall nowhere -Yes
+```
+
 ## 卸载
 
 卸载 Nowhere 节点时会同时彻底删除 OpenCtrl、节点状态、API Key、配置和安装器生成的证书：
@@ -219,6 +266,8 @@ sudo /tmp/nowheredash-install.sh uninstall all --purge --yes
 | OpenCtrl 服务 | `/etc/systemd/system/openctrl.service` |
 
 API Key 和 OpenCtrl 状态包含敏感信息；不要把 `/etc/openctrl` 或 `/opt/openctrl/bin/gob` 暴露给非受信用户。
+
+macOS 节点沿用 `/opt/openctrl`、`/etc/openctrl` 与 `/etc/nowhere/certs`，服务定义位于 `/Library/LaunchDaemons/com.nodepass.openctrl.plist`。Windows 使用 `%ProgramData%\OpenCtrl`、`%ProgramData%\OpenCtrlConfig` 与 `%ProgramData%\NowhereDash`，敏感目录的 ACL 仅允许 `SYSTEM` 和管理员访问。
 
 ## 手动运行 NowhereDash
 
