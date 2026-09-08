@@ -19,6 +19,11 @@
     "name": "Subscription name",
     "icon": "Subscription icon",
     "portals": "Tunnels",
+    "nodes": "Subscription nodes",
+    "nodeName": "Name",
+    "protocol": "Protocol",
+    "nodeUrl": "URL",
+    "externalUris": "Protocol URIs",
     "status": "Status / expiry",
     "traffic": "Traffic usage",
     "subscriptionUrl": "Subscription URL",
@@ -33,6 +38,8 @@
     "never": "Never expires",
     "unlimited": "Unlimited",
     "portalCount": "{{count}} Tunnels",
+    "sourceCount": "{{tunnels}} Tunnels · {{external}} URIs",
+    "externalUnmetered": "External traffic is not metered",
     "remainingDays": "{{count}} days remaining"
   },
   "actions": {
@@ -56,15 +63,15 @@
   },
   "empty": {
     "title": "No subscriptions",
-    "hint": "Create a subscription to publish existing Tunnels to Nowhere clients.",
+    "hint": "Create a subscription to publish existing Tunnels or protocol URIs.",
     "loading": "Loading subscriptions...",
     "loadFailed": "Failed to load subscriptions",
     "retry": "Retry"
   },
   "form": {
-    "createTitle": "Create Tunnel subscription",
-    "editTitle": "Edit Tunnel subscription",
-    "subtitle": "Content is generated dynamically from current Tunnel settings",
+    "createTitle": "Create node subscription",
+    "editTitle": "Edit node subscription",
+    "subtitle": "Content is generated from current Tunnels and protocol URIs",
     "namePlaceholder": "e.g. Nowhere global nodes",
     "portalPlaceholder": "Select Tunnels to publish",
     "selectedPortals": "{{count}} selected: {{names}}",
@@ -82,6 +89,24 @@
     "addAllVisibleTunnels": "Add current filtered results",
     "removeSelectedTunnels": "Remove selected Tunnels",
     "removeAllVisibleTunnels": "Remove current filtered results",
+    "externalUriCount": "{{count}} URIs",
+    "nodeCount": "{{count}} nodes",
+    "addNode": "Add node",
+    "addNodeOptions": "Choose how to import nodes",
+    "importPortal": "Import Portal",
+    "importUrl": "Import URL",
+    "portalImportTitle": "Import Portals",
+    "urlImportTitle": "Import URLs",
+    "importSelectedPortals": "Import {{count}} Portals",
+    "importUrls": "Import {{count}} URLs",
+    "noNodes": "No nodes added",
+    "noNodesHint": "Use the plus button to import Portals or protocol URLs.",
+    "reorderNode": "Drag to reorder",
+    "editNodeName": "Edit node name",
+    "nodeNameHint": "Saving updates the name after # in the subscription URL.",
+    "nodeNamePlaceholder": "Enter a node name",
+    "externalUriHint": "Enter one Anywhere-compatible node URI per line. Protocol parameters are preserved. External nodes are not included in local traffic usage.",
+    "externalUriPlaceholder": "vless://...\nhysteria2://...\ntrojan://...\nss://...",
     "tunnelStatus": {
       "running": "Running",
       "stopped": "Stopped",
@@ -105,6 +130,17 @@
   "validation": {
     "name": "Enter a subscription name",
     "portals": "Select at least one Tunnel",
+    "sources": "Select at least one Tunnel or enter one protocol URI",
+    "importUrlRequired": "Enter at least one protocol URL",
+    "nodeName": "Node name must contain 1 to 255 bytes",
+    "nodeNameDuplicate": "This name would duplicate an existing URL",
+    "externalUri": {
+      "duplicate": "Line {{line}} duplicates an earlier URI",
+      "alreadyImported": "The URL on line {{line}} has already been imported",
+      "format": "Line {{line}} is not a valid protocol URI",
+      "unsupported": "The {{scheme}} protocol on line {{line}} is not supported by Anywhere",
+      "tooLong": "Line {{line}} is too long, or the URI list exceeds 500 entries"
+    },
     "trafficLimit": "Traffic limit must be greater than 0"
   },
   "toast": {
@@ -154,6 +190,11 @@
     }
   },
   "confirm": {
+    "externalTraffic": {
+      "title": "Confirm subscription save",
+      "message": "This subscription contains imported protocol nodes. Traffic usage can only be measured for Nowhere Tunnels created in this dashboard. Traffic from imported nodes is not included in this subscription's usage.",
+      "confirm": "Save anyway"
+    },
     "rotate": {
       "title": "Rotate subscription token",
       "message": "Rotating the token for “{{name}}” immediately invalidates the old subscription URL. Clients using it must import the new URL.",

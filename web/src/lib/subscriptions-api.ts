@@ -2,12 +2,20 @@ import { buildApiUrl } from "@/lib/utils";
 
 export type SubscriptionCarrier = "tcp" | "udp";
 
+export type SubscriptionNodeOrderItem =
+  | { source: "portal"; tunnelId: number }
+  | { source: "url"; uri: string };
+
 export interface PortalOption {
   id: number;
   name: string;
   instanceId?: string;
   listenHost: string;
   listenPort: string | number;
+  sharedKey?: string;
+  network?: string;
+  alpn?: string;
+  portalHost?: string;
   status: "running" | "stopped" | "error" | "offline";
   type: "portal";
 }
@@ -24,7 +32,12 @@ export interface PortalSubscription {
   overLimit: boolean;
   preferences: SubscriptionPreferences;
   tunnelIds: number[];
+  tunnelNames: Record<number, string>;
   portalCount: number;
+  externalUris: string[];
+  externalNodeCount: number;
+  nodeCount: number;
+  nodeOrder: SubscriptionNodeOrderItem[];
   subscriptionUrl: string;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +58,9 @@ export interface SubscriptionPayload {
   trafficLimit: number | null;
   preferences: SubscriptionPreferences;
   tunnelIds: number[];
+  tunnelNames: Record<number, string>;
+  externalUris: string[];
+  nodeOrder: SubscriptionNodeOrderItem[];
 }
 
 export interface SubscriptionPreview {
@@ -52,6 +68,8 @@ export interface SubscriptionPreview {
   unavailableReason: string;
   content: string;
   portalCount: number;
+  externalNodeCount: number;
+  nodeCount: number;
   trafficUsed: number;
   headers: {
     "aw-icon-light": string;
@@ -208,6 +226,9 @@ export const toSubscriptionPayload = (
   trafficLimit: subscription.trafficLimit,
   preferences: subscription.preferences,
   tunnelIds: subscription.tunnelIds,
+  tunnelNames: subscription.tunnelNames,
+  externalUris: subscription.externalUris,
+  nodeOrder: subscription.nodeOrder,
   ...overrides,
 });
 

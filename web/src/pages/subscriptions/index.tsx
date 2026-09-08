@@ -222,6 +222,13 @@ export default function SubscriptionsPage() {
   };
 
   const trafficView = (subscription: PortalSubscription) => {
+    if (subscription.tunnelIds.length === 0) {
+      return (
+        <span className="text-sm text-default-400">
+          {t("values.externalUnmetered")}
+        </span>
+      );
+    }
     const finite =
       subscription.trafficLimit != null && subscription.trafficLimit > 0;
     const percentage = finite
@@ -293,6 +300,7 @@ export default function SubscriptionsPage() {
             isIconOnly
             aria-label={`${t("actions.resetTraffic")}: ${subscription.name}`}
             color="warning"
+            isDisabled={subscription.tunnelIds.length === 0}
             size="sm"
             variant="light"
             onPress={() => setPending({ action: "reset", subscription })}
@@ -438,7 +446,7 @@ export default function SubscriptionsPage() {
             <Table removeWrapper aria-label={t("title")}>
               <TableHeader>
                 <TableColumn minWidth={170}>{t("fields.name")}</TableColumn>
-                <TableColumn minWidth={180}>{t("fields.portals")}</TableColumn>
+                <TableColumn minWidth={220}>{t("fields.nodes")}</TableColumn>
                 <TableColumn minWidth={220}>
                   {t("fields.expiresAt")}
                 </TableColumn>
@@ -500,8 +508,9 @@ export default function SubscriptionsPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-default-600">
-                          {t("values.portalCount", {
-                            count: subscription.tunnelIds.length,
+                          {t("values.sourceCount", {
+                            tunnels: subscription.tunnelIds.length,
+                            external: subscription.externalNodeCount,
                           })}
                         </span>
                       </TableCell>
@@ -581,11 +590,12 @@ export default function SubscriptionsPage() {
                     <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
                       <div className="min-w-0">
                         <dt className="text-xs text-default-400">
-                          {t("fields.portals")}
+                          {t("fields.nodes")}
                         </dt>
                         <dd className="mt-1 truncate">
-                          {t("values.portalCount", {
-                            count: subscription.tunnelIds.length,
+                          {t("values.sourceCount", {
+                            tunnels: subscription.tunnelIds.length,
+                            external: subscription.externalNodeCount,
                           })}
                         </dd>
                       </div>

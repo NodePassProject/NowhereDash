@@ -394,6 +394,7 @@ func QuickInitSchema(db *gorm.DB) error {
 		&models.TunnelGroup{},
 		&models.PortalSubscription{},
 		&models.PortalSubscriptionTunnel{},
+		&models.PortalSubscriptionExternalNode{},
 
 		// 流量统计表
 		&models.TrafficHourlySummary{},
@@ -425,6 +426,7 @@ func StandardMigrate(db *gorm.DB) error {
 		&models.TunnelGroup{},
 		&models.PortalSubscription{},
 		&models.PortalSubscriptionTunnel{},
+		&models.PortalSubscriptionExternalNode{},
 
 		// 流量统计表
 		&models.TrafficHourlySummary{},

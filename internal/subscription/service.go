@@ -12,10 +12,12 @@ import (
 	"math"
 	"net"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -89,7 +91,7 @@ func (e *EntitlementEnforcer) runOnce() {
 }
 
 func (s *Service) Create(req UpsertRequest) (*Response, error) {
-	values, tunnelIDs, err := s.validateRequest(req)
+	values, tunnelIDs, externalNodes, err := s.validateRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +111,10 @@ func (s *Service) Create(req UpsertRequest) (*Response, error) {
 		if err := tx.Create(&created).Error; err != nil {
 			return err
 		}
-		return replaceTunnelLinks(tx, &created, tunnelIDs)
+		if err := replaceTunnelLinks(tx, &created, tunnelIDs, values.TunnelNames, values.NodeOrder); err != nil {
+			return err
+		}
+		return replaceExternalNodes(tx, &created, externalNodes, values.NodeOrder)
 	})
 	if err != nil {
 		return nil, err
@@ -122,11 +127,11 @@ func (s *Service) Update(id int64, req UpsertRequest) (*Response, error) {
 	if err := s.accountAndEnforce(id); err != nil {
 		return nil, err
 	}
-	values, tunnelIDs, err := s.validateRequest(req)
+	values, tunnelIDs, externalNodes, err := s.validateRequest(req)
 	if err != nil {
 		return nil, err
 	}
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err = silentDB(s.db).Transaction(func(tx *gorm.DB) error {
 		var current models.PortalSubscription
 		query := lockRows(tx).Where("id = ?", id).First(&current)
 		if errors.Is(query.Error, gorm.ErrRecordNotFound) {
@@ -148,7 +153,10 @@ func (s *Service) Update(id int64, req UpsertRequest) (*Response, error) {
 		if err := tx.Model(&current).Updates(updates).Error; err != nil {
 			return err
 		}
-		return replaceTunnelLinks(tx, &current, tunnelIDs)
+		if err := replaceTunnelLinks(tx, &current, tunnelIDs, values.TunnelNames, values.NodeOrder); err != nil {
+			return err
+		}
+		return replaceExternalNodes(tx, &current, externalNodes, values.NodeOrder)
 	})
 	if err != nil {
 		return nil, err
@@ -160,6 +168,9 @@ func (s *Service) Update(id int64, req UpsertRequest) (*Response, error) {
 func (s *Service) Delete(id int64) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("subscription_id = ?", id).Delete(&models.PortalSubscriptionTunnel{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("subscription_id = ?", id).Delete(&models.PortalSubscriptionExternalNode{}).Error; err != nil {
 			return err
 		}
 		result := tx.Delete(&models.PortalSubscription{}, id)
@@ -200,15 +211,30 @@ func (s *Service) Get(id int64) (*Response, error) {
 		}
 		return nil, err
 	}
-	var tunnelIDs []int64
-	if err := s.db.Model(&models.PortalSubscriptionTunnel{}).
-		Where("subscription_id = ?", id).Order("id ASC").Pluck("tunnel_id", &tunnelIDs).Error; err != nil {
+	var tunnelLinks []models.PortalSubscriptionTunnel
+	if err := s.db.Where("subscription_id = ?", id).Order("id ASC").Find(&tunnelLinks).Error; err != nil {
 		return nil, err
 	}
-	if tunnelIDs == nil {
-		tunnelIDs = []int64{}
+	tunnelIDs := make([]int64, 0, len(tunnelLinks))
+	tunnelNames := make(map[int64]string)
+	for _, link := range tunnelLinks {
+		tunnelIDs = append(tunnelIDs, link.TunnelID)
+		if link.NodeName != "" {
+			tunnelNames[link.TunnelID] = link.NodeName
+		}
 	}
-	return responseFromModel(subscription, tunnelIDs), nil
+	externalNodes, err := loadExternalNodes(s.db, id)
+	if err != nil {
+		return nil, err
+	}
+	externalURIs := make([]string, 0, len(externalNodes))
+	for _, node := range externalNodes {
+		externalURIs = append(externalURIs, node.URI)
+	}
+	return responseFromModel(
+		subscription, tunnelIDs, tunnelNames, externalURIs,
+		storedNodeOrder(tunnelLinks, externalNodes),
+	), nil
 }
 
 func (s *Service) RotateToken(id int64) (*RotateResponse, error) {
@@ -435,13 +461,14 @@ func (s *Service) Preview(id int64) (*PreviewResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	available := reason == "" && rendered.PortalCount > 0
-	if reason == "" && rendered.PortalCount == 0 {
-		reason = "no_running_portals"
+	available := reason == "" && rendered.NodeCount > 0
+	if reason == "" && rendered.NodeCount == 0 {
+		reason = "no_available_nodes"
 	}
 	return &PreviewResponse{
 		Available: available, UnavailableReason: reason, Content: rendered.Content,
-		PortalCount: rendered.PortalCount, TrafficUsed: subscription.TrafficUsed, Headers: rendered.Headers,
+		PortalCount: rendered.PortalCount, ExternalNodeCount: rendered.ExternalNodeCount,
+		NodeCount: rendered.NodeCount, TrafficUsed: subscription.TrafficUsed, Headers: rendered.Headers,
 	}, nil
 }
 
@@ -467,7 +494,7 @@ func (s *Service) RenderPublic(token string) (*RenderedSubscription, error) {
 	if reason != "" {
 		return nil, ErrEntitlementUnavailable
 	}
-	if subscription == nil || rendered.PortalCount == 0 {
+	if subscription == nil || rendered.NodeCount == 0 {
 		return nil, ErrNotFound
 	}
 	return &rendered, nil
@@ -503,7 +530,7 @@ func (s *Service) renderContent(subscription models.PortalSubscription) (Rendere
 	err := s.db.Preload("Tunnel.Endpoint").
 		Joins("JOIN tunnels ON tunnels.id = portal_subscription_tunnels.tunnel_id").
 		Where("portal_subscription_tunnels.subscription_id = ?", subscription.ID).
-		Where("tunnels.type = ? AND tunnels.status = ?", models.TunnelTypePortal, models.TunnelStatusRunning).
+		Where("tunnels.type = ?", models.TunnelTypePortal).
 		Order("portal_subscription_tunnels.id ASC").Find(&links).Error
 	if err != nil {
 		return RenderedSubscription{}, err
@@ -511,11 +538,38 @@ func (s *Service) renderContent(subscription models.PortalSubscription) (Rendere
 	preferences := preferencesFromModel(subscription)
 	lines := make([]string, 0, len(links))
 	portalCount := 0
+	var externalNodes []models.PortalSubscriptionExternalNode
+	if err := s.db.Where("subscription_id = ?", subscription.ID).
+		Order("position ASC").Find(&externalNodes).Error; err != nil {
+		return RenderedSubscription{}, err
+	}
+	linksByID := make(map[int64]models.PortalSubscriptionTunnel, len(links))
 	for _, link := range links {
-		portalLines := renderPortal(&link.Tunnel, preferences)
-		if len(portalLines) > 0 {
-			portalCount++
-			lines = append(lines, portalLines...)
+		linksByID[link.TunnelID] = link
+	}
+	externalByURI := make(map[string]models.PortalSubscriptionExternalNode, len(externalNodes))
+	for _, node := range externalNodes {
+		externalByURI[node.URI] = node
+	}
+	for _, item := range storedNodeOrder(links, externalNodes) {
+		if item.Source == "portal" {
+			link, ok := linksByID[item.TunnelID]
+			if !ok || link.Tunnel.Status != models.TunnelStatusRunning {
+				continue
+			}
+			tunnel := link.Tunnel
+			if link.NodeName != "" {
+				tunnel.Name = link.NodeName
+			}
+			portalLines := renderPortal(&tunnel, preferences)
+			if len(portalLines) > 0 {
+				portalCount++
+				lines = append(lines, portalLines...)
+			}
+			continue
+		}
+		if node, ok := externalByURI[item.URI]; ok {
+			lines = append(lines, node.URI)
 		}
 	}
 	content := ""
@@ -523,7 +577,8 @@ func (s *Service) renderContent(subscription models.PortalSubscription) (Rendere
 		content = strings.Join(lines, "\n") + "\n"
 	}
 	return RenderedSubscription{
-		Content: content, PortalCount: portalCount, Headers: subscriptionHeaders(subscription),
+		Content: content, PortalCount: portalCount, ExternalNodeCount: len(externalNodes),
+		NodeCount: portalCount + len(externalNodes), Headers: subscriptionHeaders(subscription),
 	}, nil
 }
 
@@ -536,30 +591,32 @@ type validatedRequest struct {
 	ExpandCarrierCombos    bool
 	UpCarrier, DownCarrier string
 	IncludeIPv6            bool
+	TunnelNames            map[int64]string
+	NodeOrder              []NodeOrderItem
 }
 
-func (s *Service) validateRequest(req UpsertRequest) (validatedRequest, []int64, error) {
+func (s *Service) validateRequest(req UpsertRequest) (validatedRequest, []int64, []externalNodeValue, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" || len([]byte(name)) > 255 {
-		return validatedRequest{}, nil, errors.New("name must contain 1 to 255 bytes")
+		return validatedRequest{}, nil, nil, errors.New("name must contain 1 to 255 bytes")
 	}
 	profileTitle := strings.TrimSpace(req.ProfileTitle)
 	if profileTitle == "" {
 		profileTitle = name
 	}
 	if len([]byte(profileTitle)) > 255 {
-		return validatedRequest{}, nil, errors.New("profileTitle must contain at most 255 bytes")
+		return validatedRequest{}, nil, nil, errors.New("profileTitle must contain at most 255 bytes")
 	}
 	var icon []byte
 	if req.Icon != nil {
 		var err error
 		icon, err = decodeSubscriptionIcon(*req.Icon)
 		if err != nil {
-			return validatedRequest{}, nil, err
+			return validatedRequest{}, nil, nil, err
 		}
 	}
 	if req.TrafficLimit != nil && *req.TrafficLimit < 0 {
-		return validatedRequest{}, nil, errors.New("trafficLimit must be nonnegative or null")
+		return validatedRequest{}, nil, nil, errors.New("trafficLimit must be nonnegative or null")
 	}
 	preferences := Preferences{ExpandCarrierCombos: true, UpCarrier: "tcp", DownCarrier: "tcp"}
 	if req.Preferences != nil {
@@ -574,39 +631,181 @@ func (s *Service) validateRequest(req UpsertRequest) (validatedRequest, []int64,
 		}
 	}
 	if !validCarrier(preferences.UpCarrier) || !validCarrier(preferences.DownCarrier) {
-		return validatedRequest{}, nil, errors.New("upCarrier and downCarrier must be tcp or udp")
+		return validatedRequest{}, nil, nil, errors.New("upCarrier and downCarrier must be tcp or udp")
 	}
 	tunnelIDs := uniquePositiveIDs(req.TunnelIDs)
 	if len(tunnelIDs) != len(req.TunnelIDs) {
-		return validatedRequest{}, nil, errors.New("tunnelIds must contain unique positive IDs")
+		return validatedRequest{}, nil, nil, errors.New("tunnelIds must contain unique positive IDs")
 	}
 	if len(tunnelIDs) > 0 {
 		var count int64
 		if err := s.db.Model(&models.Tunnel{}).Where("id IN ? AND type = ?", tunnelIDs, models.TunnelTypePortal).Count(&count).Error; err != nil {
-			return validatedRequest{}, nil, err
+			return validatedRequest{}, nil, nil, err
 		}
 		if count != int64(len(tunnelIDs)) {
-			return validatedRequest{}, nil, errors.New("all tunnelIds must reference existing tunnels")
+			return validatedRequest{}, nil, nil, errors.New("all tunnelIds must reference existing tunnels")
 		}
+	}
+	tunnelIDSet := make(map[int64]struct{}, len(tunnelIDs))
+	for _, tunnelID := range tunnelIDs {
+		tunnelIDSet[tunnelID] = struct{}{}
+	}
+	tunnelNames := make(map[int64]string)
+	for tunnelID, value := range req.TunnelNames {
+		if _, selected := tunnelIDSet[tunnelID]; !selected {
+			return validatedRequest{}, nil, nil, errors.New("tunnelNames must only reference selected tunnelIds")
+		}
+		name := strings.TrimSpace(value)
+		if name == "" {
+			continue
+		}
+		if len([]byte(name)) > 255 || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+			return validatedRequest{}, nil, nil, errors.New("tunnelNames values must contain 1 to 255 bytes without control characters")
+		}
+		tunnelNames[tunnelID] = name
+	}
+	externalNodes, err := validateExternalURIs(req.ExternalURIs)
+	if err != nil {
+		return validatedRequest{}, nil, nil, err
+	}
+	nodeOrder, err := validateNodeOrder(req.NodeOrder, tunnelIDs, externalNodes)
+	if err != nil {
+		return validatedRequest{}, nil, nil, err
 	}
 	return validatedRequest{
 		Name: name, ProfileTitle: profileTitle, Icon: icon, IconSet: req.Icon != nil, ExpiresAt: req.ExpiresAt,
 		TrafficLimit: req.TrafficLimit, ExpandCarrierCombos: preferences.ExpandCarrierCombos,
 		UpCarrier: preferences.UpCarrier, DownCarrier: preferences.DownCarrier, IncludeIPv6: preferences.IncludeIPv6,
-	}, tunnelIDs, nil
+		TunnelNames: tunnelNames, NodeOrder: nodeOrder,
+	}, tunnelIDs, externalNodes, nil
 }
 
-func replaceTunnelLinks(tx *gorm.DB, subscription *models.PortalSubscription, tunnelIDs []int64) error {
+func validateNodeOrder(requested []NodeOrderItem, tunnelIDs []int64, externalNodes []externalNodeValue) ([]NodeOrderItem, error) {
+	defaultOrder := make([]NodeOrderItem, 0, len(tunnelIDs)+len(externalNodes))
+	for _, tunnelID := range tunnelIDs {
+		defaultOrder = append(defaultOrder, NodeOrderItem{Source: "portal", TunnelID: tunnelID})
+	}
+	for _, node := range externalNodes {
+		defaultOrder = append(defaultOrder, NodeOrderItem{Source: "url", URI: node.URI})
+	}
+	if len(requested) == 0 {
+		return defaultOrder, nil
+	}
+	if len(requested) != len(defaultOrder) {
+		return nil, errors.New("nodeOrder must contain every selected Portal and external URL exactly once")
+	}
+
+	wantedTunnels := make(map[int64]struct{}, len(tunnelIDs))
+	for _, tunnelID := range tunnelIDs {
+		wantedTunnels[tunnelID] = struct{}{}
+	}
+	wantedURIs := make(map[string]struct{}, len(externalNodes))
+	for _, node := range externalNodes {
+		wantedURIs[node.URI] = struct{}{}
+	}
+	result := make([]NodeOrderItem, 0, len(requested))
+	for _, item := range requested {
+		switch item.Source {
+		case "portal":
+			if _, exists := wantedTunnels[item.TunnelID]; !exists {
+				return nil, errors.New("nodeOrder contains an unknown or duplicate Portal")
+			}
+			delete(wantedTunnels, item.TunnelID)
+			result = append(result, NodeOrderItem{Source: "portal", TunnelID: item.TunnelID})
+		case "url":
+			if _, exists := wantedURIs[item.URI]; !exists {
+				return nil, errors.New("nodeOrder contains an unknown or duplicate external URL")
+			}
+			delete(wantedURIs, item.URI)
+			result = append(result, NodeOrderItem{Source: "url", URI: item.URI})
+		default:
+			return nil, errors.New("nodeOrder source must be portal or url")
+		}
+	}
+	return result, nil
+}
+
+func nodePositions(order []NodeOrderItem) (map[int64]int, map[string]int) {
+	portalPositions := make(map[int64]int)
+	externalPositions := make(map[string]int)
+	for position, item := range order {
+		if item.Source == "portal" {
+			portalPositions[item.TunnelID] = position
+		} else if item.Source == "url" {
+			externalPositions[item.URI] = position
+		}
+	}
+	return portalPositions, externalPositions
+}
+
+func storedNodeOrder(links []models.PortalSubscriptionTunnel, externalNodes []models.PortalSubscriptionExternalNode) []NodeOrderItem {
+	type positionedNode struct {
+		position int
+		item     NodeOrderItem
+	}
+	total := len(links) + len(externalNodes)
+	positioned := make([]positionedNode, 0, total)
+	seenPositions := make(map[int]struct{}, total)
+	validPositions := true
+	for _, link := range links {
+		if link.Position < 0 || link.Position >= total {
+			validPositions = false
+		}
+		if _, duplicate := seenPositions[link.Position]; duplicate {
+			validPositions = false
+		}
+		seenPositions[link.Position] = struct{}{}
+		positioned = append(positioned, positionedNode{
+			position: link.Position,
+			item:     NodeOrderItem{Source: "portal", TunnelID: link.TunnelID},
+		})
+	}
+	for _, node := range externalNodes {
+		if node.Position < 0 || node.Position >= total {
+			validPositions = false
+		}
+		if _, duplicate := seenPositions[node.Position]; duplicate {
+			validPositions = false
+		}
+		seenPositions[node.Position] = struct{}{}
+		positioned = append(positioned, positionedNode{
+			position: node.Position,
+			item:     NodeOrderItem{Source: "url", URI: node.URI},
+		})
+	}
+	if validPositions && len(seenPositions) == total {
+		sort.SliceStable(positioned, func(left, right int) bool {
+			return positioned[left].position < positioned[right].position
+		})
+	}
+	result := make([]NodeOrderItem, 0, total)
+	for _, node := range positioned {
+		result = append(result, node.item)
+	}
+	return result
+}
+
+func replaceTunnelLinks(tx *gorm.DB, subscription *models.PortalSubscription, tunnelIDs []int64, tunnelNames map[int64]string, nodeOrder []NodeOrderItem) error {
 	var current []models.PortalSubscriptionTunnel
 	if err := tx.Where("subscription_id = ?", subscription.ID).Find(&current).Error; err != nil {
 		return err
 	}
 	wanted := make(map[int64]struct{}, len(tunnelIDs))
+	positions, _ := nodePositions(nodeOrder)
 	for _, id := range tunnelIDs {
 		wanted[id] = struct{}{}
 	}
 	for _, link := range current {
 		if _, keep := wanted[link.TunnelID]; keep {
+			name := tunnelNames[link.TunnelID]
+			position := positions[link.TunnelID]
+			if link.NodeName != name || link.Position != position {
+				if err := tx.Model(&link).Updates(map[string]interface{}{
+					"node_name": name, "position": position,
+				}).Error; err != nil {
+					return err
+				}
+			}
 			delete(wanted, link.TunnelID)
 			continue
 		}
@@ -625,6 +824,7 @@ func replaceTunnelLinks(tx *gorm.DB, subscription *models.PortalSubscription, tu
 		observed := tunnelTraffic(&tunnel)
 		link := models.PortalSubscriptionTunnel{
 			SubscriptionID: subscription.ID, TunnelID: tunnelID,
+			NodeName: tunnelNames[tunnelID], Position: positions[tunnelID],
 			BaselineBytes: observed, LastObservedBytes: observed,
 		}
 		if err := tx.Create(&link).Error; err != nil {
@@ -634,13 +834,45 @@ func replaceTunnelLinks(tx *gorm.DB, subscription *models.PortalSubscription, tu
 	return nil
 }
 
-func responseFromModel(subscription models.PortalSubscription, tunnelIDs []int64) *Response {
+func replaceExternalNodes(tx *gorm.DB, subscription *models.PortalSubscription, values []externalNodeValue, nodeOrder []NodeOrderItem) error {
+	if err := tx.Where("subscription_id = ?", subscription.ID).
+		Delete(&models.PortalSubscriptionExternalNode{}).Error; err != nil {
+		return err
+	}
+	_, positions := nodePositions(nodeOrder)
+	for _, value := range values {
+		node := models.PortalSubscriptionExternalNode{
+			SubscriptionID: subscription.ID, Position: positions[value.URI],
+			Scheme: value.Scheme, URI: value.URI,
+		}
+		if err := tx.Create(&node).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadExternalNodes(db *gorm.DB, subscriptionID int64) ([]models.PortalSubscriptionExternalNode, error) {
+	var values []models.PortalSubscriptionExternalNode
+	err := db.
+		Where("subscription_id = ?", subscriptionID).
+		Order("position ASC, id ASC").Find(&values).Error
+	if values == nil {
+		values = []models.PortalSubscriptionExternalNode{}
+	}
+	return values, err
+}
+
+func responseFromModel(subscription models.PortalSubscription, tunnelIDs []int64, tunnelNames map[int64]string, externalURIs []string, nodeOrder []NodeOrderItem) *Response {
 	return &Response{
 		ID: subscription.ID, Name: subscription.Name, Icon: subscriptionIconDataURL(subscription.Icon), ProfileTitle: subscription.ProfileTitle,
 		Token: subscription.Token, SubscriptionURL: subscriptionURL(subscription.Token),
 		ExpiresAt: subscription.ExpiresAt, TrafficLimit: subscription.TrafficLimit,
 		TrafficUsed: subscription.TrafficUsed, OverLimit: subscription.OverLimit,
 		Preferences: preferencesFromModel(subscription), TunnelIDs: tunnelIDs, PortalCount: len(tunnelIDs),
+		TunnelNames:  tunnelNames,
+		ExternalURIs: externalURIs, ExternalNodeCount: len(externalURIs), NodeCount: len(tunnelIDs) + len(externalURIs),
+		NodeOrder: nodeOrder,
 		CreatedAt: subscription.CreatedAt, UpdatedAt: subscription.UpdatedAt,
 	}
 }

@@ -41,7 +41,7 @@ func TestSubscriptionRouteAuthenticationAndSecurityHeaders(t *testing.T) {
 	}
 	if err := db.AutoMigrate(
 		&models.SystemConfig{}, &models.UserSession{}, &models.Endpoint{}, &models.Tunnel{},
-		&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{},
+		&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}, &models.PortalSubscriptionExternalNode{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -78,6 +78,18 @@ func TestSubscriptionRouteAuthenticationAndSecurityHeaders(t *testing.T) {
 		t.Fatalf("empty public status = %d, want 404", empty.Code)
 	}
 	assertNoStoreHeaders(t, empty)
+
+	externalURI := "trojan://password@trojan.example:443#External"
+	external, err := service.Create(subscription.UpsertRequest{Name: "external", ExternalURIs: []string{externalURI}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	externalResponse := httptest.NewRecorder()
+	r.ServeHTTP(externalResponse, httptest.NewRequest(http.MethodGet, external.SubscriptionURL, nil))
+	if externalResponse.Code != http.StatusOK || externalResponse.Body.String() != externalURI+"\n" {
+		t.Fatalf("external subscription status=%d body=%q", externalResponse.Code, externalResponse.Body.String())
+	}
+	assertNoStoreHeaders(t, externalResponse)
 
 	endpoint := models.Endpoint{Name: "master", URL: "master://portal.example:10101", Hostname: "portal.example", APIPath: "/api/v2", APIKey: "key"}
 	if err := db.Create(&endpoint).Error; err != nil {

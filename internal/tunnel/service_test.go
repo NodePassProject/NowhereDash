@@ -170,7 +170,7 @@ func TestDeleteTunnelAccountsSubscriptionTrafficBeforeRemovingLink(t *testing.T)
 	}
 	if err := db.AutoMigrate(
 		&models.Endpoint{}, &models.Tunnel{}, &models.TunnelOperationLog{}, &models.TunnelGroup{},
-		&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{},
+		&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}, &models.PortalSubscriptionExternalNode{},
 	); err != nil {
 		t.Fatal(err)
 	}

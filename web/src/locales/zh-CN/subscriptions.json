@@ -19,6 +19,11 @@
     "name": "订阅名称",
     "icon": "订阅图标",
     "portals": "隧道",
+    "nodes": "订阅节点",
+    "nodeName": "名称",
+    "protocol": "协议",
+    "nodeUrl": "URL",
+    "externalUris": "协议 URI",
     "status": "状态 / 到期时间",
     "traffic": "流量用量",
     "subscriptionUrl": "订阅 URL",
@@ -33,6 +38,8 @@
     "never": "永不过期",
     "unlimited": "不限流量",
     "portalCount": "{{count}} 个隧道",
+    "sourceCount": "{{tunnels}} 条隧道 · {{external}} 条 URI",
+    "externalUnmetered": "外部节点不统计流量",
     "remainingDays": "剩余 {{count}} 天"
   },
   "actions": {
@@ -56,15 +63,15 @@
   },
   "empty": {
     "title": "暂无订阅",
-    "hint": "创建一个订阅，将现有隧道发布给 Nowhere 客户端。",
+    "hint": "创建订阅，发布现有隧道或协议 URI。",
     "loading": "正在加载订阅...",
     "loadFailed": "订阅列表加载失败",
     "retry": "重试"
   },
   "form": {
-    "createTitle": "创建隧道订阅",
-    "editTitle": "编辑隧道订阅",
-    "subtitle": "正文始终按当前隧道配置动态生成",
+    "createTitle": "创建节点订阅",
+    "editTitle": "编辑节点订阅",
+    "subtitle": "正文由当前隧道和协议 URI 动态生成",
     "namePlaceholder": "例如：Nowhere 全球节点",
     "portalPlaceholder": "选择要发布的隧道",
     "selectedPortals": "已选择 {{count}} 个：{{names}}",
@@ -82,6 +89,24 @@
     "addAllVisibleTunnels": "添加当前筛选结果",
     "removeSelectedTunnels": "移除勾选的隧道",
     "removeAllVisibleTunnels": "移除当前筛选结果",
+    "externalUriCount": "{{count}} 条 URI",
+    "nodeCount": "{{count}} 个节点",
+    "addNode": "添加节点",
+    "addNodeOptions": "选择节点导入方式",
+    "importPortal": "导入 Portal",
+    "importUrl": "导入 URL",
+    "portalImportTitle": "导入 Portal",
+    "urlImportTitle": "批量导入 URL",
+    "importSelectedPortals": "导入 {{count}} 个 Portal",
+    "importUrls": "导入 {{count}} 条 URL",
+    "noNodes": "尚未添加节点",
+    "noNodesHint": "使用右上角的加号导入 Portal 或协议 URL。",
+    "reorderNode": "拖拽排序",
+    "editNodeName": "编辑节点名称",
+    "nodeNameHint": "保存后会同步更新订阅 URL 中 # 后的名称。",
+    "nodeNamePlaceholder": "输入节点名称",
+    "externalUriHint": "每行一个 Anywhere 支持的节点 URI；协议参数会原样保留。外部节点不计入本机流量。",
+    "externalUriPlaceholder": "vless://...\nhysteria2://...\ntrojan://...\nss://...",
     "tunnelStatus": {
       "running": "运行中",
       "stopped": "已停止",
@@ -105,6 +130,17 @@
   "validation": {
     "name": "请输入订阅名称",
     "portals": "请至少选择一条隧道",
+    "sources": "请至少选择一条隧道或填写一条协议 URI",
+    "importUrlRequired": "请至少输入一条协议 URL",
+    "nodeName": "节点名称必须包含 1 至 255 个字节",
+    "nodeNameDuplicate": "修改后会与已有 URL 重复",
+    "externalUri": {
+      "duplicate": "第 {{line}} 行与前面的 URI 重复",
+      "alreadyImported": "第 {{line}} 行 URL 已经导入",
+      "format": "第 {{line}} 行不是有效的协议 URI",
+      "unsupported": "第 {{line}} 行的 {{scheme}} 协议不受 Anywhere 支持",
+      "tooLong": "第 {{line}} 行过长，或 URI 总数超过 500 条"
+    },
     "trafficLimit": "流量上限必须大于 0"
   },
   "toast": {
@@ -154,6 +190,11 @@
     }
   },
   "confirm": {
+    "externalTraffic": {
+      "title": "确认保存订阅",
+      "message": "订阅中包含导入的协议节点。流量统计只能统计由本面板创建的 Nowhere 隧道，导入节点产生的流量不会计入本订阅用量。",
+      "confirm": "仍然保存"
+    },
     "rotate": {
       "title": "轮换订阅 Token",
       "message": "轮换“{{name}}”的 Token 后，旧订阅 URL 会立即失效。已保存旧链接的客户端必须重新导入。",

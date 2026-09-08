@@ -41,7 +41,7 @@ func openSubscriptionTestDB(t *testing.T, configuredLogger logger.Interface) *go
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(
 		&models.Endpoint{}, &models.Tunnel{},
-		&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{},
+		&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}, &models.PortalSubscriptionExternalNode{},
 		&models.TunnelOperationLog{},
 	); err != nil {
 		t.Fatalf("migrate database: %v", err)
@@ -486,7 +486,7 @@ func TestDeleteDoesNotUpgradeAStaleSQLiteReadSnapshot(t *testing.T) {
 	}
 	sqlDB.SetMaxOpenConns(2)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}); err != nil {
+	if err := db.AutoMigrate(&models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}, &models.PortalSubscriptionExternalNode{}); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 

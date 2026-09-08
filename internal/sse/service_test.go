@@ -48,7 +48,7 @@ func portalEvent(eventType string, endpointID int64, instanceID, rawURL string) 
 
 func TestPortalDeletionPreservesEndpointTraffic(t *testing.T) {
 	database := openSSETestDB(t)
-	if err := database.AutoMigrate(&models.EndpointTrafficCursor{}, &models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}); err != nil {
+	if err := database.AutoMigrate(&models.EndpointTrafficCursor{}, &models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}, &models.PortalSubscriptionExternalNode{}); err != nil {
 		t.Fatal(err)
 	}
 	ep := models.Endpoint{Name: "traffic", URL: "http://traffic", APIPath: "/api/v2", APIKey: "test"}
