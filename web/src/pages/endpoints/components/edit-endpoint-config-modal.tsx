@@ -11,7 +11,11 @@ import {
 } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 
+import EndpointBillingFields from "./endpoint-billing-fields";
+import type { EndpointBillingForm } from "@/lib/endpoint-billing";
+
 export interface EndpointConfigForm {
+  billing: EndpointBillingForm;
   name: string;
   url: string;
   apiKey: string;
@@ -40,6 +44,7 @@ export default function EditEndpointConfigModal({
       isOpen={isOpen}
       placement="center"
       size="lg"
+      scrollBehavior="inside"
       onOpenChange={onOpenChange}
     >
       <ModalContent>
@@ -80,7 +85,6 @@ export default function EditEndpointConfigModal({
                 />
 
                 <Input
-                  description={t("details.modals.editConfig.apiKeyDescription")}
                   label={t("details.modals.editConfig.apiKeyLabel")}
                   placeholder={t("details.modals.editConfig.apiKeyPlaceholder")}
                   type="password"
@@ -91,9 +95,6 @@ export default function EditEndpointConfigModal({
                 />
 
                 <Input
-                  description={t(
-                    "details.modals.editConfig.hostnameDescription",
-                  )}
                   label={t("details.modals.editConfig.hostnameLabel")}
                   placeholder={t(
                     "details.modals.editConfig.hostnamePlaceholder",
@@ -101,6 +102,12 @@ export default function EditEndpointConfigModal({
                   value={configForm.hostname}
                   onValueChange={(value) =>
                     setConfigForm((prev) => ({ ...prev, hostname: value }))
+                  }
+                />
+                <EndpointBillingFields
+                  value={configForm.billing}
+                  onChange={(billing) =>
+                    setConfigForm((prev) => ({ ...prev, billing }))
                   }
                 />
               </div>

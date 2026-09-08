@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"NowhereDash/internal/endpointtraffic"
 	"NowhereDash/internal/models"
 	"NowhereDash/internal/nowhere"
 	"NowhereDash/internal/subscription"
@@ -293,8 +294,18 @@ func (s *Service) UpdatePortal(id int64, req PortalRequest) (*models.Tunnel, err
 		return nil, err
 	}
 	commandLine := nowhere.BuildTunnelURLs(updated)
+	if err := endpointtraffic.SyncEndpoint(s.db, existing.EndpointID, time.Now()); err != nil {
+		return nil, err
+	}
 	remote, err := nowhere.UpdateInstance(existing.EndpointID, *existing.InstanceID, commandLine)
 	if err != nil {
+		return nil, err
+	}
+	observedAt := time.Now()
+	if err := endpointtraffic.Observe(s.db, models.EndpointTrafficCursor{
+		EndpointID: existing.EndpointID, InstanceID: *existing.InstanceID, ObservedAt: observedAt,
+		TCPRx: remote.TCPRx, TCPTx: remote.TCPTx, UDPRx: remote.UDPRx, UDPTx: remote.UDPTx,
+	}, observedAt); err != nil {
 		return nil, err
 	}
 	if req.Name != "" && req.Name != existing.Name {
@@ -310,6 +321,7 @@ func (s *Service) UpdatePortal(id int64, req PortalRequest) (*models.Tunnel, err
 	}
 	updated.CommandLine = commandLine
 	applyInstanceState(&updated, remote)
+	updated.LastEventTime = models.NullTime{Time: observedAt, Valid: true}
 	applySubmittedMetadata(&updated, desiredTags, desiredPeer)
 	updates := nowhere.TunnelToMap(&updated)
 	if updated.ConfigLine == nil {
@@ -402,6 +414,9 @@ func (s *Service) DeleteTunnel(id int64) error {
 	if err := subscription.NewService(s.db).AccountTunnels([]int64{tunnel.ID}); err != nil {
 		return fmt.Errorf("account tunnel subscription traffic: %w", err)
 	}
+	if err := endpointtraffic.SyncEndpoint(s.db, tunnel.EndpointID, time.Now()); err != nil {
+		return err
+	}
 	if tunnel.InstanceID != nil && *tunnel.InstanceID != "" {
 		if err := nowhere.DeleteInstance(tunnel.EndpointID, *tunnel.InstanceID); err != nil && !strings.Contains(err.Error(), "404") {
 			return err
@@ -488,10 +503,23 @@ func (s *Service) ResetTunnelTrafficByInstanceID(instanceID string) error {
 	if err := s.db.Where("instance_id = ? AND type = ?", instanceID, models.TunnelTypePortal).First(&tunnel).Error; err != nil {
 		return err
 	}
+	if err := endpointtraffic.SyncEndpoint(s.db, tunnel.EndpointID, time.Now()); err != nil {
+		return err
+	}
 	if _, err := nowhere.ResetTraffic(tunnel.EndpointID, instanceID); err != nil {
 		return err
 	}
-	return s.db.Model(&tunnel).Updates(map[string]interface{}{"tcp_rx": 0, "tcp_tx": 0, "udp_rx": 0, "udp_tx": 0}).Error
+	now := time.Now()
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := endpointtraffic.Observe(tx, models.EndpointTrafficCursor{
+			EndpointID: tunnel.EndpointID, InstanceID: instanceID, ObservedAt: now,
+		}, now); err != nil {
+			return err
+		}
+		return tx.Model(&tunnel).Updates(map[string]interface{}{
+			"tcp_rx": 0, "tcp_tx": 0, "udp_rx": 0, "udp_tx": 0, "last_event_time": now,
+		}).Error
+	})
 }
 
 func (s *Service) GetInstanceIDByTunnelID(id int64) (string, error) {

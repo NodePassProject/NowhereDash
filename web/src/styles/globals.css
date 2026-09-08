@@ -73,9 +73,3 @@
 .group:hover .group-hover\:rotate-y-2.group-hover\:-rotate-x-2 {
   transform: rotateY(2deg) rotateX(-2deg);
 }
-
-/* 背景模糊增强 */
-.backdrop-saturate-150 {
-  backdrop-filter: saturate(1.5);
-  -webkit-backdrop-filter: saturate(1.5);
-}

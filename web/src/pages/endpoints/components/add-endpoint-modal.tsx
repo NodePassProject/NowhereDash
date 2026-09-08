@@ -22,6 +22,13 @@ import {
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 
+import EndpointBillingFields from "./endpoint-billing-fields";
+import {
+  billingForm,
+  billingPayload,
+  billingError,
+} from "@/lib/endpoint-billing";
+
 // 表单数据接口
 interface EndpointDraft {
   name: string;
@@ -32,6 +39,7 @@ interface EndpointDraft {
 
 // API提交数据接口
 interface EndpointFormData extends Omit<EndpointDraft, "connectionIP"> {
+  billing: ReturnType<typeof billingPayload>;
   apiPath: string;
   hostname?: string;
 }
@@ -51,6 +59,7 @@ export default function AddEndpointModal({
 }: AddEndpointModalProps) {
   const { t } = useTranslation("endpoints");
   const [step, setStep] = useState<ModalStep>("form");
+  const [billing, setBilling] = useState(billingForm);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [importText, setImportText] = useState("");
@@ -172,6 +181,11 @@ export default function AddEndpointModal({
 
   // 测试连接并检查兼容性
   const testConnectionCompatibility = async () => {
+    const error = billingError(billing);
+    if (error) {
+      addToast({ title: t(error), color: "warning" });
+      return;
+    }
     if (!formData.url || !formData.apiKey) {
       addToast({
         title: t("toast.incompleteParams"),
@@ -226,6 +240,7 @@ export default function AddEndpointModal({
 
     // 构造包含API前缀的数据对象，保持原有接口兼容
     const data: EndpointFormData = {
+      billing: billingPayload(billing),
       name: formData.name,
       url: baseUrl,
       apiPath: apiPath,
@@ -246,6 +261,7 @@ export default function AddEndpointModal({
     });
     setTestResult(null);
     setShowTestResultModal(false);
+    setBilling(billingForm());
     onOpenChange(false); // 关闭所有模态框
   };
 
@@ -446,6 +462,12 @@ export default function AddEndpointModal({
                         )}
                       </div>
 
+                      <div className="mt-4">
+                        <EndpointBillingFields
+                          value={billing}
+                          onChange={setBilling}
+                        />
+                      </div>
                       <div className="mt-6 flex w-full justify-end gap-2">
                         <div className="flex gap-2">
                           <Button

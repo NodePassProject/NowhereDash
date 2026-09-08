@@ -185,10 +185,11 @@ export const Navbar = () => {
       {/* 移动端展开菜单 */}
       <NavbarMenu
         className={cn(
+          "bg-background",
           isRadioCenter &&
-            "top-[calc(var(--navbar-height)+16px)] mx-auto mt-3 max-h-[50vh] max-w-[90vw] rounded-2xl border border-default-200/60 bg-background/80 py-6 shadow-medium backdrop-blur-md backdrop-saturate-150 dark:border-default-100/30 dark:bg-default-100/60",
+            "top-[calc(var(--navbar-height)+16px)] mx-auto mt-3 max-h-[50vh] max-w-[90vw] rounded-2xl border border-default-200/60 bg-content1 py-6 shadow-medium dark:border-default-100/30",
           isBasicHeader &&
-            "top-[calc(var(--navbar-height)+8px)] mx-auto mt-2 max-h-[52vh] max-w-[92vw] rounded-2xl border border-default-200/60 bg-background/90 py-6 shadow-medium backdrop-blur-md backdrop-saturate-150 dark:border-default-100/30 dark:bg-default-100/70",
+            "top-[calc(var(--navbar-height)+8px)] mx-auto mt-2 max-h-[52vh] max-w-[92vw] rounded-2xl border border-default-200/60 bg-content1 py-6 shadow-medium dark:border-default-100/30",
         )}
       >
         <NavbarMobileMenu onSelect={() => setIsMenuOpen(false)} />

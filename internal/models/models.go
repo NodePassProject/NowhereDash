@@ -26,9 +26,24 @@ type Endpoint struct {
 	LastCheck             time.Time      `json:"lastCheck" gorm:"column:last_check"`
 	CreatedAt             time.Time      `json:"createdAt" gorm:"autoCreateTime;column:created_at"`
 	UpdatedAt             time.Time      `json:"updatedAt" gorm:"autoUpdateTime;column:updated_at"`
+	Price                 *float64       `json:"price"`
+	Amount                *string        `json:"amount" gorm:"type:text"`
+	Currency              string         `json:"currency" gorm:"not null;default:'CNY'"`
+	MonthlyTrafficLimit   *int64         `json:"monthlyTrafficLimit"`
+	TrafficUsed           int64          `json:"trafficUsed" gorm:"not null;default:0"`
+	TrafficTotal          int64          `json:"trafficTotal" gorm:"not null;default:0"`
+	TrafficResetDay       int            `json:"trafficResetDay" gorm:"not null;default:1"`
+	TrafficResetTime      string         `json:"trafficResetTime" gorm:"not null;default:'00:00'"`
+	TrafficResetDate      string         `json:"trafficResetDate"`
+	TrafficResetTimezone  string         `json:"trafficResetTimezone" gorm:"not null;default:'UTC'"`
+	AutoResetTraffic      bool           `json:"autoResetTraffic" gorm:"not null;default:false"`
+	NextTrafficResetAt    *time.Time     `json:"nextTrafficResetAt" gorm:"index"`
+	LastTrafficResetAt    *time.Time     `json:"lastTrafficResetAt"`
+	TrafficInitialized    bool           `json:"-" gorm:"not null;default:false"`
 
 	// 关联
-	Tunnels []Tunnel `json:"tunnels,omitempty" gorm:"foreignKey:EndpointID"`
+	Tunnels        []Tunnel                `json:"tunnels,omitempty" gorm:"foreignKey:EndpointID"`
+	TrafficCursors []EndpointTrafficCursor `json:"-" gorm:"foreignKey:EndpointID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName 设置表名

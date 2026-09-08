@@ -138,6 +138,7 @@ func newEndpointTestDB(t *testing.T) *gorm.DB {
 
 	if err := db.AutoMigrate(
 		&models.Endpoint{},
+		&models.EndpointTrafficCursor{},
 		&models.Tunnel{},
 		&models.TunnelGroup{},
 		&models.TunnelOperationLog{},

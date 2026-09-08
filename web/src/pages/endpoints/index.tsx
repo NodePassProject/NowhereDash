@@ -75,6 +75,13 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 
 import AddEndpointModal from "./components/add-endpoint-modal";
+import EndpointBillingSummary from "./components/endpoint-billing-summary";
+import {
+  type EndpointBilling,
+  billingForm,
+  billingPayload,
+  billingError,
+} from "@/lib/endpoint-billing";
 import GuidedAddModal from "./components/guided-add-modal";
 import RenameEndpointModal from "./components/rename-endpoint-modal";
 import EditApiKeyModal from "./components/edit-apikey-modal";
@@ -106,7 +113,7 @@ interface EndpointWithRelations extends EndpointBase {
   }>;
 }
 
-interface FormattedEndpoint extends EndpointWithRelations {
+interface FormattedEndpoint extends EndpointWithRelations, EndpointBilling {
   apiPath: string;
   apiKey: string;
   hostname?: string;
@@ -129,7 +136,11 @@ interface EndpointFormData {
 const INSTALL_SCRIPT_URL =
   "https://raw.githubusercontent.com/NodePassProject/nowheredash/refs/heads/main/scripts/install.sh";
 const INSTALL_SCRIPT_PATH = "/tmp/nowheredash-install.sh";
-const NOWHERE_INSTALL_COMMAND = `curl -fsSL ${INSTALL_SCRIPT_URL} -o ${INSTALL_SCRIPT_PATH} && sudo bash ${INSTALL_SCRIPT_PATH} install nowhere`;
+const NOWHERE_SCRIPT_COMMANDS = {
+  install: `curl -fsSL ${INSTALL_SCRIPT_URL} -o ${INSTALL_SCRIPT_PATH} && sudo bash ${INSTALL_SCRIPT_PATH} install nowhere`,
+  upgrade: `curl -fsSL ${INSTALL_SCRIPT_URL} -o ${INSTALL_SCRIPT_PATH} && sudo bash ${INSTALL_SCRIPT_PATH} update nowhere --yes`,
+  uninstall: `curl -fsSL ${INSTALL_SCRIPT_URL} -o ${INSTALL_SCRIPT_PATH} && sudo bash ${INSTALL_SCRIPT_PATH} uninstall nowhere --yes`,
+} as const;
 
 // 可排序的表格行组件
 function SortableTableRow({
@@ -274,6 +285,7 @@ export default function EndpointsPage() {
   const [selectedEndpoint, setSelectedEndpoint] =
     useState<FormattedEndpoint | null>(null);
   const [configForm, setConfigForm] = useState<EndpointConfigForm>({
+    billing: billingForm(),
     name: "",
     url: "",
     apiKey: "",
@@ -366,6 +378,22 @@ export default function EndpointsPage() {
   useEffect(() => {
     fetchEndpoints();
   }, [fetchEndpoints]);
+
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const response = await fetch(buildApiUrl("/api/endpoints"));
+        if (!response.ok) return;
+        const data = await response.json();
+        if (isMountedRef.current) setEndpoints(data);
+      } catch {
+        // Keep the current snapshot during a temporary connection failure.
+      }
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   // 格式化URL显示（处理脱敏逻辑）
   const formatUrl = (url: string, apiPath: string) => {
@@ -1227,6 +1255,7 @@ export default function EndpointsPage() {
   const handleEditConfigClick = (endpoint: FormattedEndpoint) => {
     setSelectedEndpoint(endpoint);
     setConfigForm({
+      billing: billingForm(endpoint),
       name: endpoint.name,
       url: endpoint.url + endpoint.apiPath,
       apiKey: "",
@@ -1237,6 +1266,12 @@ export default function EndpointsPage() {
 
   const handleSubmitEditConfig = async () => {
     if (!selectedEndpoint?.id) return;
+
+    const error = billingError(configForm.billing);
+    if (error) {
+      addToast({ title: t(error), color: "warning" });
+      return;
+    }
 
     if (!configForm.name.trim() || !configForm.url.trim()) {
       addToast({
@@ -1257,12 +1292,16 @@ export default function EndpointsPage() {
     const hasApiKeyChange = configForm.apiKey.trim() !== "";
     const hasHostnameChange =
       configForm.hostname.trim() !== (endpoint.hostname || "");
+    const hasBillingChange =
+      JSON.stringify(billingPayload(configForm.billing)) !==
+      JSON.stringify(billingPayload(billingForm(endpoint)));
 
     if (
       !hasNameChange &&
       !hasUrlChange &&
       !hasApiKeyChange &&
-      !hasHostnameChange
+      !hasHostnameChange &&
+      !hasBillingChange
     ) {
       addToast({
         title: t("details.toasts.editConfigNoChange"),
@@ -1293,6 +1332,7 @@ export default function EndpointsPage() {
         }
 
         const updateData: {
+          billing: ReturnType<typeof billingPayload>;
           action: string;
           apiKey?: string;
           hostname: string;
@@ -1302,6 +1342,7 @@ export default function EndpointsPage() {
         } = {
           id: endpointId,
           action: "updateConfig",
+          billing: billingPayload(configForm.billing),
           name: configForm.name.trim(),
           url: configForm.url.trim(),
           hostname: configForm.hostname.trim(),
@@ -1457,11 +1498,13 @@ export default function EndpointsPage() {
     onManualCopyOpen();
   };
 
-  // 复制 Nowhere 一键安装命令（安装器会自动安装 OpenCtrl）
-  function handleCopyInstallScript() {
+  function handleCopyNodeScript(
+    action: keyof typeof NOWHERE_SCRIPT_COMMANDS,
+    successMessage: string,
+  ) {
     copyToClipboard(
-      NOWHERE_INSTALL_COMMAND,
-      t("toast.copyInstallSuccess"),
+      NOWHERE_SCRIPT_COMMANDS[action],
+      successMessage,
       showManualCopyModal,
     );
   }
@@ -1523,23 +1566,49 @@ export default function EndpointsPage() {
                 startContent={<Icon icon="lucide:terminal" width={17} />}
                 variant="flat"
               >
-                {t("actions.copyInstall")}
+                {t("actions.nodeScripts")}
               </Button>
             </DropdownTrigger>
-            <DropdownMenu aria-label={t("actions.installOptions")}>
-              <DropdownItem
-                key="copy-install"
-                startContent={<Icon icon="lucide:copy" width={17} />}
-                onPress={handleCopyInstallScript}
-              >
-                {t("actions.copyInstall")}
-              </DropdownItem>
+            <DropdownMenu aria-label={t("actions.scriptOptions")}>
               <DropdownItem
                 key="guided-add"
+                showDivider
                 startContent={<Icon icon="lucide:list-checks" width={17} />}
                 onPress={onGuidedAddOpen}
               >
                 {t("actions.guidedAdd")}
+              </DropdownItem>
+              <DropdownItem
+                key="copy-install"
+                startContent={<Icon icon="lucide:download" width={17} />}
+                onPress={() =>
+                  handleCopyNodeScript("install", t("toast.copyInstallSuccess"))
+                }
+              >
+                {t("actions.copyInstall")}
+              </DropdownItem>
+              <DropdownItem
+                key="copy-upgrade"
+                startContent={<Icon icon="lucide:circle-arrow-up" width={17} />}
+                onPress={() =>
+                  handleCopyNodeScript("upgrade", t("toast.copyUpgradeSuccess"))
+                }
+              >
+                {t("actions.copyUpgrade")}
+              </DropdownItem>
+              <DropdownItem
+                key="copy-uninstall"
+                className="text-danger"
+                color="danger"
+                startContent={<Icon icon="lucide:trash-2" width={17} />}
+                onPress={() =>
+                  handleCopyNodeScript(
+                    "uninstall",
+                    t("toast.copyUninstallSuccess"),
+                  )
+                }
+              >
+                {t("actions.copyUninstall")}
               </DropdownItem>
             </DropdownMenu>
           </Dropdown>
@@ -1587,17 +1656,12 @@ export default function EndpointsPage() {
         /* Skeleton 加载状态 */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 6 }, (_, index) => (
-            <Card key={index} className="relative w-full h-[200px]">
-              {/* 状态按钮 Skeleton */}
-              <div className="absolute right-4 top-6 z-10">
-                <Skeleton className="h-8 w-12 rounded-full" />
-              </div>
-
+            <Card key={index} className="relative w-full h-[216px]">
               {/* 主要内容区域 Skeleton */}
-              <CardBody className="relative h-[140px] bg-gradient-to-br from-content1 to-default-100/50 p-6">
-                <div className="flex items-center gap-3 mb-2 pr-20">
+              <CardBody className="relative bg-gradient-to-br from-content1 to-default-100/50 p-5 pb-[76px]">
+                <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
                   <Skeleton className="h-8 w-32 rounded-lg" />
-                  <Skeleton className="h-6 w-16 rounded-lg" />
+                  <Skeleton className="h-7 w-12 shrink-0 rounded-full" />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -1636,51 +1700,47 @@ export default function EndpointsPage() {
                 key={endpoint.id}
                 isPressable
                 as="div"
-                className="relative w-full h-[200px]"
+                className="relative w-full min-h-[216px]"
                 onPress={() => navigate(`/endpoints/details?id=${endpoint.id}`)}
               >
-                {/* 状态按钮 */}
-                <div className="absolute right-4 top-6 z-10">
-                  <Chip
-                    color={
-                      realTimeData.status === "ONLINE"
-                        ? "success"
-                        : realTimeData.status === "FAIL"
-                          ? "danger"
-                          : realTimeData.status === "DISCONNECT"
-                            ? "default"
-                            : "warning"
-                    }
-                    radius="full"
-                    variant="flat"
-                  >
-                    {realTimeData.status === "ONLINE"
-                      ? t("status.online")
-                      : realTimeData.status === "FAIL"
-                        ? t("status.fail")
-                        : realTimeData.status === "DISCONNECT"
-                          ? t("status.disconnect")
-                          : t("status.offline")}
-                  </Chip>
-                </div>
-
                 {/* 主要内容区域 */}
-                <CardBody className="relative h-[140px] bg-gradient-to-br from-content1 to-default-100/50 p-6">
-                  <div className="flex items-center gap-2 mb-2 pr-15">
-                    {/*  */}
+                <CardBody className="relative overflow-hidden bg-gradient-to-br from-content1 to-default-100/50 p-5 pb-[76px]">
+                  <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
                     {endpoint.name.length < 10 && (
-                      <h2 className="inline bg-gradient-to-br from-foreground-800 to-foreground-500 bg-clip-text text-2xl font-semibold tracking-tight text-transparent dark:to-foreground-200">
+                      <h2 className="min-w-0 flex-1 break-all text-xl font-semibold text-foreground">
                         {endpoint.name}
                       </h2>
                     )}
                     {endpoint.name.length >= 10 && (
                       <h2
-                        className={`leading-tight cursor-help overflow-hidden max-h-[2.5em] bg-gradient-to-br from-foreground-800 to-foreground-500 bg-clip-text text-xl font-semibold tracking-tight text-transparent dark:to-foreground-200`}
+                        className="min-w-0 flex-1 line-clamp-2 text-lg font-semibold leading-tight text-foreground"
                         style={{ wordBreak: "break-all" }}
                       >
                         {endpoint.name}
                       </h2>
                     )}
+                    <Chip
+                      className="shrink-0"
+                      color={
+                        realTimeData.status === "ONLINE"
+                          ? "success"
+                          : realTimeData.status === "FAIL"
+                            ? "danger"
+                            : realTimeData.status === "DISCONNECT"
+                              ? "default"
+                              : "warning"
+                      }
+                      radius="full"
+                      variant="flat"
+                    >
+                      {realTimeData.status === "ONLINE"
+                        ? t("status.online")
+                        : realTimeData.status === "FAIL"
+                          ? t("status.fail")
+                          : realTimeData.status === "DISCONNECT"
+                            ? t("status.disconnect")
+                            : t("status.offline")}
+                    </Chip>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-default-400">
@@ -1697,6 +1757,9 @@ export default function EndpointsPage() {
                           : endpoint.apiKey}
                       </span>
                     </div>
+                  </div>
+                  <div className="mt-2">
+                    <EndpointBillingSummary endpoint={endpoint} />
                   </div>
                 </CardBody>
 
@@ -1719,7 +1782,7 @@ export default function EndpointsPage() {
           <Card
             isPressable
             as="div"
-            className="relative w-full h-[200px] cursor-pointer hover:shadow-lg transition-shadow border-2 border-dashed border-default-300 hover:border-primary"
+            className="relative h-full min-h-[216px] w-full cursor-pointer hover:shadow-lg transition-shadow border-2 border-dashed border-default-300 hover:border-primary"
             onPress={openBlankAddModal}
           >
             <CardBody className="flex flex-col items-center justify-center h-full bg-gradient-to-br from-default-50 to-default-100/50 p-6">

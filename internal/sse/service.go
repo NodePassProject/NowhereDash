@@ -2,6 +2,7 @@ package sse
 
 import (
 	"NowhereDash/internal/endpoint"
+	"NowhereDash/internal/endpointtraffic"
 	log "NowhereDash/internal/log"
 	"NowhereDash/internal/models"
 	"NowhereDash/internal/nowhere"
@@ -180,6 +181,18 @@ func (s *Service) UnsubscribeFromTunnel(clientID, tunnelID string) {
 
 // ProcessEvent 处理SSE事件
 func (s *Service) ProcessEvent(payload SSEResp) {
+	if payload.Instance.Type == string(models.TunnelTypePortal) && payload.Instance.ID != "" &&
+		(payload.Type == "initial" || payload.Type == "create" || payload.Type == "update" || payload.Type == "delete") {
+		err := endpointtraffic.Observe(s.db, models.EndpointTrafficCursor{
+			EndpointID: payload.EndpointID, InstanceID: payload.Instance.ID, ObservedAt: payload.TimeStamp,
+			TCPRx: payload.Instance.TCPRx, TCPTx: payload.Instance.TCPTx,
+			UDPRx: payload.Instance.UDPRx, UDPTx: payload.Instance.UDPTx,
+		}, time.Now())
+		if err != nil {
+			log.Errorf("[Master-%d] Cannot account Portal traffic: %v", payload.EndpointID, err)
+			return
+		}
+	}
 	switch payload.Type {
 	case "shutdown":
 		s.handleShutdownEvent(payload)

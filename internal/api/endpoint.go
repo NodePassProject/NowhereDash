@@ -3,6 +3,7 @@ package api
 import (
 	"NowhereDash/internal/db"
 	"NowhereDash/internal/endpoint"
+	"NowhereDash/internal/endpointtraffic"
 	log "NowhereDash/internal/log"
 	"NowhereDash/internal/models"
 	"NowhereDash/internal/nowhere"
@@ -159,10 +160,11 @@ func (h *EndpointHandler) HandleUpdateEndpoint(c *gin.Context) {
 	}
 
 	var body struct {
-		Name    string `json:"name"`
-		URL     string `json:"url"`
-		APIPath string `json:"apiPath"`
-		APIKey  string `json:"apiKey"`
+		Billing *endpointtraffic.Plan `json:"billing,omitempty"`
+		Name    string                `json:"name"`
+		URL     string                `json:"url"`
+		APIPath string                `json:"apiPath"`
+		APIKey  string                `json:"apiKey"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{
@@ -179,6 +181,7 @@ func (h *EndpointHandler) HandleUpdateEndpoint(c *gin.Context) {
 	body.APIKey = strings.TrimSpace(body.APIKey)
 
 	req := endpoint.UpdateEndpointRequest{
+		Billing: body.Billing,
 		ID:      id,
 		Action:  "update",
 		Name:    body.Name,
@@ -378,6 +381,13 @@ func (h *EndpointHandler) HandlePatchEndpoint(c *gin.Context) {
 		var req endpoint.UpdateEndpointRequest
 		req.ID = id
 		req.Action = "updateConfig"
+		if billing, ok := body["billing"]; ok && billing != nil {
+			encoded, err := json.Marshal(billing)
+			if err != nil || json.Unmarshal(encoded, &req.Billing) != nil || req.Billing == nil {
+				c.JSON(http.StatusBadRequest, endpoint.EndpointResponse{Success: false, Error: "Invalid billing settings"})
+				return
+			}
+		}
 
 		// 从body中获取参数
 		if name, ok := body["name"].(string); ok {
@@ -694,6 +704,9 @@ func (h *EndpointHandler) refreshTunnels(endpointID int64) error {
 
 	// 使用事务执行
 	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := endpointtraffic.SyncEndpoint(tx, endpointID, time.Now()); err != nil {
+			return err
+		}
 		// 处理每个实例
 		for _, inst := range instances {
 			if inst.Type != string(models.TunnelTypePortal) {

@@ -1,6 +1,7 @@
 package endpoint
 
 import (
+	"NowhereDash/internal/endpointtraffic"
 	"NowhereDash/internal/models"
 )
 
@@ -23,23 +24,25 @@ type EndpointWithStats struct {
 
 // CreateEndpointRequest 创建端点请求
 type CreateEndpointRequest struct {
-	Name     string `json:"name" validate:"required,max=50"`
-	URL      string `json:"url" validate:"required,url"`
-	APIPath  string `json:"apiPath" validate:"required"`
-	APIKey   string `json:"apiKey" validate:"required,max=200"`
-	Hostname string `json:"hostname,omitempty"` // 连接IP，留空则自动从URL解析
-	Color    string `json:"color,omitempty"`
+	Billing  *endpointtraffic.Plan `json:"billing,omitempty"`
+	Name     string                `json:"name" validate:"required,max=50"`
+	URL      string                `json:"url" validate:"required,url"`
+	APIPath  string                `json:"apiPath" validate:"required"`
+	APIKey   string                `json:"apiKey" validate:"required,max=200"`
+	Hostname string                `json:"hostname,omitempty"` // 连接IP，留空则自动从URL解析
+	Color    string                `json:"color,omitempty"`
 }
 
 // UpdateEndpointRequest 更新端点请求
 type UpdateEndpointRequest struct {
-	ID       int64  `json:"id" validate:"required"`
-	Action   string `json:"action" validate:"required,oneof=update rename updateConfig updateApiKey"`
-	Name     string `json:"name,omitempty" validate:"omitempty,max=50"`
-	URL      string `json:"url,omitempty" validate:"omitempty,url"`
-	APIPath  string `json:"apiPath,omitempty"`
-	APIKey   string `json:"apiKey,omitempty" validate:"omitempty,max=200"`
-	Hostname string `json:"hostname,omitempty"` // 连接IP，留空则自动从URL解析
+	Billing  *endpointtraffic.Plan `json:"billing,omitempty"`
+	ID       int64                 `json:"id" validate:"required"`
+	Action   string                `json:"action" validate:"required,oneof=update rename updateConfig updateApiKey"`
+	Name     string                `json:"name,omitempty" validate:"omitempty,max=50"`
+	URL      string                `json:"url,omitempty" validate:"omitempty,url"`
+	APIPath  string                `json:"apiPath,omitempty"`
+	APIKey   string                `json:"apiKey,omitempty" validate:"omitempty,max=200"`
+	Hostname string                `json:"hostname,omitempty"` // 连接IP，留空则自动从URL解析
 }
 
 // EndpointResponse API 响应

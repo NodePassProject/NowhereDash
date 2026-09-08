@@ -52,7 +52,15 @@
     "clearTitle": "Clear Recent Activity",
     "confirmClear": "Confirm Clear",
     "confirmMessage": "This operation will delete all recent activity records and cannot be undone. Are you sure you want to continue?",
-    "clearing": "Clearing..."
+    "clearing": "Clearing...",
+    "unknownTime": "Unknown time",
+    "unknownTunnel": "Unknown tunnel",
+    "status": {
+      "success": "Success",
+      "failed": "Failed",
+      "pending": "Pending",
+      "unknown": "Unknown"
+    }
   },
   "table": {
     "time": "Time",

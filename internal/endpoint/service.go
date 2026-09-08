@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"NowhereDash/internal/db/dialect"
+	"NowhereDash/internal/endpointtraffic"
 	"NowhereDash/internal/models"
 	"NowhereDash/internal/nowhere"
 	"NowhereDash/internal/subscription"
@@ -46,6 +47,9 @@ func (s *Service) EndpointNameExists(name string) (bool, error) {
 
 // GetEndpoints 获取所有端点列表
 func (s *Service) GetEndpoints() ([]EndpointWithStats, error) {
+	if err := endpointtraffic.SyncAll(s.db, time.Now()); err != nil {
+		return nil, err
+	}
 	var endpoints []EndpointWithStats
 
 	err := s.db.Table("endpoints e").
@@ -129,6 +133,11 @@ func extractHostFromString(input string) string {
 
 // CreateEndpoint 创建新端点
 func (s *Service) CreateEndpoint(req CreateEndpointRequest) (*Endpoint, error) {
+	if req.Billing != nil {
+		if err := req.Billing.Validate(); err != nil {
+			return nil, err
+		}
+	}
 	req.URL = strings.TrimRight(strings.TrimSpace(req.URL), "/")
 	req.APIPath = nowhere.NormalizeAPIPath(req.APIPath)
 
@@ -167,6 +176,11 @@ func (s *Service) CreateEndpoint(req CreateEndpointRequest) (*Endpoint, error) {
 		LastCheck: time.Now(),
 	}
 
+	if req.Billing != nil {
+		if err := req.Billing.Apply(endpoint, time.Now()); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.db.Create(endpoint).Error; err != nil {
 		return nil, err
 	}
@@ -179,6 +193,23 @@ func (s *Service) CreateEndpoint(req CreateEndpointRequest) (*Endpoint, error) {
 
 // UpdateEndpoint 更新端点信息
 func (s *Service) UpdateEndpoint(req UpdateEndpointRequest) (*Endpoint, error) {
+	if req.Billing != nil {
+		if req.Action != "update" && req.Action != "updateConfig" {
+			return nil, errors.New("billing requires update or updateConfig action")
+		}
+		plan := *req.Billing
+		req.Billing = nil
+		var result *Endpoint
+		err := s.db.Transaction(func(tx *gorm.DB) error {
+			if err := endpointtraffic.UpdatePlan(tx, req.ID, plan, time.Now()); err != nil {
+				return err
+			}
+			var err error
+			result, err = NewService(tx).UpdateEndpoint(req)
+			return err
+		})
+		return result, err
+	}
 	if req.URL != "" {
 		req.URL = strings.TrimRight(strings.TrimSpace(req.URL), "/")
 	}
@@ -420,6 +451,9 @@ func (s *Service) DeleteEndpoint(id int64) error {
 		}
 
 		// 10) 删除端点
+		if err := tx.Where("endpoint_id = ?", id).Delete(&models.EndpointTrafficCursor{}).Error; err != nil {
+			return err
+		}
 		result := tx.Delete(&models.Endpoint{}, id)
 		if result.Error != nil {
 			return result.Error
@@ -473,6 +507,9 @@ func (s *Service) UpdateEndpointStatus(id int64, status EndpointStatus) error {
 
 // GetEndpointByID 根据ID获取端点信息
 func (s *Service) GetEndpointByID(id int64) (*Endpoint, error) {
+	if err := endpointtraffic.SyncEndpoint(s.db, id, time.Now()); err != nil {
+		return nil, err
+	}
 	var endpoint models.Endpoint
 	if err := s.db.First(&endpoint, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

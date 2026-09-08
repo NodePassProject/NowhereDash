@@ -6,6 +6,7 @@ import (
 	dbPkg "NowhereDash/internal/db"
 	"NowhereDash/internal/endpoint"
 	// "NowhereDash/internal/lifecycle"
+	"NowhereDash/internal/endpointtraffic"
 	log "NowhereDash/internal/log"
 	"NowhereDash/internal/nowhere"
 	"NowhereDash/internal/router"
@@ -231,10 +232,16 @@ func setupStaticFiles(ginRouter *gin.Engine) error {
 	// JS/CSS 等构建资源
 	ginRouter.StaticFS("/assets", http.FS(assetsSubFS))
 
-	// 为页面品牌图标和浏览器默认 favicon 请求提供同一份官方素材。
-	ginRouter.GET("/nowhere.png", func(c *gin.Context) {
-		serveStaticFile(c, distSubFS, "nowhere.png", "image/png")
-	})
+	// 提供 Vite public 目录中位于构建根目录的品牌图片。
+	pngFiles := []string{"nowhere.png", "logo.png", "logo-dark.png"}
+	for _, pngFile := range pngFiles {
+		pngFile := pngFile
+		ginRouter.GET("/"+pngFile, func(c *gin.Context) {
+			serveStaticFile(c, distSubFS, pngFile, "image/png")
+		})
+	}
+
+	// 保留浏览器默认 favicon 请求对旧品牌图片的兼容。
 	ginRouter.GET("/favicon.ico", func(c *gin.Context) {
 		serveStaticFile(c, distSubFS, "nowhere.png", "image/png")
 	})
@@ -544,6 +551,8 @@ func main() {
 	subscriptionEnforcer := subscription.NewEntitlementEnforcer(gormDB, time.Minute)
 	subscriptionEnforcer.Start()
 	defer subscriptionEnforcer.Stop()
+	stopEndpointTraffic := endpointtraffic.StartScheduler(gormDB)
+	defer stopEndpointTraffic()
 
 	// 记录未使用的变量以避免编译错误
 	_ = authService

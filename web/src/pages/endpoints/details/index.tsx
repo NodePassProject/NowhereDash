@@ -65,6 +65,12 @@ import { useSettings } from "@/components/providers/settings-provider";
 import SystemStatsCharts from "@/components/ui/system-stats-charts";
 import NetworkDebugModal from "@/components/ui/network-debug-modal";
 import { copyToClipboard } from "@/lib/utils/clipboard";
+import {
+  type EndpointBilling,
+  billingForm,
+  billingPayload,
+  billingError,
+} from "@/lib/endpoint-billing";
 
 const INSTALLER_BASE_URL =
   "https://raw.githubusercontent.com/NodePassProject/NowhereDash/main/scripts";
@@ -74,7 +80,7 @@ const WINDOWS_UNINSTALL_COMMAND = `Invoke-WebRequest -UseBasicParsing '${INSTALL
 type UninstallPlatform = "unix" | "windows";
 
 // 主控详情接口定义
-interface EndpointDetail {
+interface EndpointDetail extends EndpointBilling {
   id: number;
   name: string;
   url: string;
@@ -204,6 +210,7 @@ export default function EndpointDetailPage() {
 
   // 表单状态
   const [configForm, setConfigForm] = useState<EndpointConfigForm>({
+    billing: billingForm(),
     name: "", // 主控名称，留空表示不修改
     url: "", // 完整URL（包含API路径），留空表示不修改
     apiKey: "", // API密钥，留空表示不修改
@@ -785,6 +792,7 @@ export default function EndpointDetailPage() {
     const fullUrl = endpointDetail.url + endpointDetail.apiPath;
 
     setConfigForm({
+      billing: billingForm(endpointDetail),
       name: endpointDetail.name,
       url: fullUrl,
       apiKey: "", // API密钥留空，表示不修改
@@ -795,6 +803,12 @@ export default function EndpointDetailPage() {
 
   const handleSubmitEditConfig = async () => {
     if (!endpointId) return;
+
+    const error = billingError(configForm.billing);
+    if (error) {
+      addToast({ title: t(error), color: "warning" });
+      return;
+    }
 
     // 验证必填字段
     if (!configForm.name.trim() || !configForm.url.trim()) {
@@ -817,12 +831,16 @@ export default function EndpointDetailPage() {
     const hasApiKeyChange = configForm.apiKey.trim() !== "";
     const hasHostnameChange =
       configForm.hostname.trim() !== (endpointDetail?.hostname || "");
+    const hasBillingChange =
+      JSON.stringify(billingPayload(configForm.billing)) !==
+      JSON.stringify(billingPayload(billingForm(endpointDetail || {})));
 
     if (
       !hasNameChange &&
       !hasUrlChange &&
       !hasApiKeyChange &&
-      !hasHostnameChange
+      !hasHostnameChange &&
+      !hasBillingChange
     ) {
       addToast({
         title: t("details.toasts.editConfigNoChange"),
@@ -862,6 +880,7 @@ export default function EndpointDetailPage() {
         const updateData: any = {
           id: Number(endpointId),
           action: "updateConfig",
+          billing: billingPayload(configForm.billing),
           name: configForm.name.trim(),
           url: configForm.url.trim(),
           hostname: configForm.hostname.trim(), // 传递连接IP

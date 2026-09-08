@@ -134,7 +134,7 @@ export default function SubscriptionIconPicker({
 
   const chooseFile = async (file: File | undefined) => {
     if (!file) return;
-    if (file.type !== "image/png") {
+    if (!["image/png", "image/jpeg"].includes(file.type)) {
       addToast({
         title: t("form.iconInvalidType"),
         color: "warning",
@@ -337,7 +337,7 @@ export default function SubscriptionIconPicker({
           </div>
           <input
             ref={inputRef}
-            accept="image/png,.png"
+            accept="image/png,image/jpeg,.png,.jpg,.jpeg"
             className="sr-only"
             type="file"
             onChange={(event) => {

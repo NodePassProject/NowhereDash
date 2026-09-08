@@ -52,7 +52,15 @@
     "clearTitle": "清空最近活动",
     "confirmClear": "确认清空最近活动",
     "confirmMessage": "此操作将删除所有最近活动记录，且不可撤销。确定要继续吗？",
-    "clearing": "清空中..."
+    "clearing": "清空中...",
+    "unknownTime": "时间未知",
+    "unknownTunnel": "未知隧道",
+    "status": {
+      "success": "成功",
+      "failed": "失败",
+      "pending": "处理中",
+      "unknown": "未知"
+    }
   },
   "table": {
     "time": "时间",

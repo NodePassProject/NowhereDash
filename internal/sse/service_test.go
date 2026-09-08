@@ -46,6 +46,41 @@ func portalEvent(eventType string, endpointID int64, instanceID, rawURL string) 
 	return payload
 }
 
+func TestPortalDeletionPreservesEndpointTraffic(t *testing.T) {
+	database := openSSETestDB(t)
+	if err := database.AutoMigrate(&models.EndpointTrafficCursor{}, &models.PortalSubscription{}, &models.PortalSubscriptionTunnel{}); err != nil {
+		t.Fatal(err)
+	}
+	ep := models.Endpoint{Name: "traffic", URL: "http://traffic", APIPath: "/api/v2", APIKey: "test"}
+	if err := database.Create(&ep).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := testSSEService(database)
+	base := time.Now()
+	for i, eventType := range []string{"initial", "update", "delete"} {
+		payload := portalEvent(eventType, ep.ID, "accounted-portal", "portal://secret@:2077")
+		payload.TimeStamp = base.Add(time.Duration(i) * time.Second)
+		payload.Instance.TCPRx = 100
+		if i > 0 {
+			payload.Instance.TCPRx = 175
+		}
+		service.ProcessEvent(payload)
+	}
+	var count int64
+	if err := database.Model(&models.Tunnel{}).Where("endpoint_id = ?", ep.ID).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("Portal was not deleted: %d", count)
+	}
+	if err := database.First(&ep, ep.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if ep.TrafficTotal != 175 || ep.TrafficUsed != 175 {
+		t.Fatalf("traffic after SSE deletion = total %d, period %d", ep.TrafficTotal, ep.TrafficUsed)
+	}
+}
+
 func TestPortalEventsWithoutMetadataPreserveStoredMetadata(t *testing.T) {
 	for _, eventType := range []string{"create", "update"} {
 		t.Run(eventType, func(t *testing.T) {

@@ -382,6 +382,7 @@ func QuickInitSchema(db *gorm.DB) error {
 	return db.AutoMigrate(
 		// 基础表
 		&models.Endpoint{},
+		&models.EndpointTrafficCursor{},
 		&models.SystemConfig{},
 		&models.UserSession{},
 		&models.Group{},
@@ -412,6 +413,7 @@ func StandardMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		// 基础表
 		&models.Endpoint{},
+		&models.EndpointTrafficCursor{},
 		&models.SystemConfig{},
 		&models.UserSession{},
 		&models.Group{},

@@ -53,16 +53,12 @@ interface TunnelStats {
 
 // 操作日志类型
 interface OperationLog {
-  id: string;
-  time: string;
+  id: number;
+  createdAt: string;
   action: string;
-  instance: string;
-  status: {
-    type: "success" | "danger" | "warning";
-    text: string;
-    icon: string;
-  };
-  message?: string;
+  tunnelName: string;
+  status: string;
+  message?: string | null;
 }
 
 // 流量趋势数据类型
@@ -107,7 +103,7 @@ function CurrentTimeDisplay() {
  * 仪表盘页面 - 使用服务端事件 SSE 架构
  */
 export default function DashboardPage() {
-  const { t } = useTranslation("dashboard");
+  const { t, i18n } = useTranslation("dashboard");
   const { t: tCommon } = useTranslation("common");
   const [tunnelStats, setTunnelStats] = useState<TunnelStats>({
     total: 0,
@@ -539,6 +535,53 @@ export default function DashboardPage() {
     }
   };
 
+  const formatOperationTime = (value: string) => {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return t("activity.unknownTime");
+
+    return date.toLocaleString(i18n.resolvedLanguage || "zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getOperationStatus = (status: string) => {
+    switch (status?.trim().toLowerCase()) {
+      case "success":
+      case "succeeded":
+      case "completed":
+        return {
+          color: "success" as const,
+          icon: "solar:check-circle-bold",
+          text: t("activity.status.success"),
+        };
+      case "error":
+      case "failed":
+      case "failure":
+        return {
+          color: "danger" as const,
+          icon: "solar:close-circle-bold",
+          text: t("activity.status.failed"),
+        };
+      case "pending":
+      case "warning":
+        return {
+          color: "warning" as const,
+          icon: "solar:clock-circle-bold",
+          text: t("activity.status.pending"),
+        };
+      default:
+        return {
+          color: "default" as const,
+          icon: "solar:info-circle-bold",
+          text: status || t("activity.status.unknown"),
+        };
+    }
+  };
+
   return (
     <div
       className={cn("space-y-4 md:space-y-6 p-4 md:p-0", fontSans.className)}
@@ -852,12 +895,7 @@ export default function DashboardPage() {
                         <TableCell>
                           {columnKey === "time" && (
                             <div className="text-xs md:text-sm">
-                              {new Date(log.time).toLocaleString("zh-CN", {
-                                month: "2-digit",
-                                day: "2-digit",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              {formatOperationTime(log.createdAt)}
                             </div>
                           )}
                           {columnKey === "action" && (
@@ -878,29 +916,34 @@ export default function DashboardPage() {
                           )}
                           {columnKey === "instance" && (
                             <div className="truncate text-xs md:text-sm">
-                              {log.instance}
+                              {log.tunnelName || t("activity.unknownTunnel")}
                             </div>
                           )}
-                          {columnKey === "status" && (
-                            <Chip
-                              classNames={{
-                                base: "text-xs max-w-full",
-                                content: "truncate",
-                              }}
-                              color={log.status.type}
-                              size="sm"
-                              startContent={
-                                <Icon
-                                  className="md:w-3.5 md:h-3.5"
-                                  icon={log.status.icon}
-                                  width={12}
-                                />
-                              }
-                              variant="flat"
-                            >
-                              {log.status.text}
-                            </Chip>
-                          )}
+                          {columnKey === "status" &&
+                            (() => {
+                              const status = getOperationStatus(log.status);
+
+                              return (
+                                <Chip
+                                  classNames={{
+                                    base: "text-xs max-w-full",
+                                    content: "truncate",
+                                  }}
+                                  color={status.color}
+                                  size="sm"
+                                  startContent={
+                                    <Icon
+                                      className="md:w-3.5 md:h-3.5"
+                                      icon={status.icon}
+                                      width={12}
+                                    />
+                                  }
+                                  variant="flat"
+                                >
+                                  {status.text}
+                                </Chip>
+                              );
+                            })()}
                         </TableCell>
                       )}
                     </TableRow>

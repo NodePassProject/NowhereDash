@@ -97,7 +97,7 @@
     "cropIconHint": "拖动图片调整位置，使用滑块缩放；保存时会自动压缩为 96×96 PNG。",
     "iconZoom": "缩放",
     "applyIconCrop": "应用裁剪",
-    "iconInvalidType": "请选择 PNG 图片",
+    "iconInvalidType": "请选择 PNG、JPG 或 JPEG 图片",
     "iconInputTooLarge": "原始图片不能超过 5 MiB",
     "iconOutputTooLarge": "压缩后仍超过 32 KiB，请使用更简洁的图片",
     "iconProcessFailed": "图片处理失败，请重新选择"
