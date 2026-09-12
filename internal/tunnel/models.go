@@ -50,7 +50,12 @@ type PortalRequest struct {
 	Name        string             `json:"name" binding:"required"`
 	EndpointID  int64              `json:"endpointId" binding:"required"`
 	ListenHost  string             `json:"listenHost"`
-	ListenPort  string             `json:"listenPort" binding:"required"`
+	ListenPort  string             `json:"listenPort"`
+	TCPPort     *string            `json:"tcpPort"`
+	UDPPort     *string            `json:"udpPort"`
+	TCPFamily   string             `json:"tcpFamily"`
+	UDPFamily   string             `json:"udpFamily"`
+	Morph       *string            `json:"morph"`
 	SharedKey   string             `json:"sharedKey" binding:"required"`
 	Network     string             `json:"network"`
 	TLSMode     TLSMode            `json:"tlsMode"`

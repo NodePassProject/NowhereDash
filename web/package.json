@@ -1,7 +1,7 @@
 {
   "name": "NowhereDash",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "license": "GPL-3.0-only",
   "packageManager": "pnpm@10.23.0",
   "type": "module",
@@ -13,6 +13,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:check": "tsc && vite build",
+    "test:portal": "node --test tests/portal-url.test.mjs",
     "lint": "eslint --fix",
     "preview": "vite preview"
   },

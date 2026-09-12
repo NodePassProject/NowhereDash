@@ -28,7 +28,7 @@ type Manager struct {
 	connections map[int64]*EndpointConnection
 
 	// 事件处理 worker pool
-	jobs chan eventJob // 投递待解析/处理的原始 SSE 事件
+	jobs []chan eventJob // Each endpoint stays on one ordered worker queue.
 
 	// 守护进程相关
 	daemonCtx    context.Context    // 守护进程上下文
@@ -57,7 +57,6 @@ func NewManager(db *sql.DB, service *Service, enableDebugLog bool, driver ...str
 		db:             db,
 		driver:         drv,
 		connections:    make(map[int64]*EndpointConnection),
-		jobs:           make(chan eventJob, 30000), // 增加缓冲大小到30000
 		daemonCtx:      ctx,
 		daemonCancel:   cancel,
 		enableDebugLog: enableDebugLog,
@@ -481,7 +480,7 @@ func (m *Manager) listenSSE(ctx context.Context, conn *EndpointConnection) {
 
 			// 投递到全局 worker pool 异步处理
 			select {
-			case m.jobs <- eventJob{endpointID: conn.EndpointID, payload: string(ev.Data)}:
+			case m.eventQueue(conn.EndpointID) <- eventJob{endpointID: conn.EndpointID, payload: string(ev.Data)}:
 				// 成功投递到队列
 			default:
 				// 如果队列已满，记录告警，避免阻塞 r3labs 读取协程
@@ -632,15 +631,28 @@ func (m *Manager) StartWorkers(n int) {
 	if n <= 0 {
 		n = 4 // 默认 4 个
 	}
-	for i := 0; i < n; i++ {
-		go m.workerLoop()
+	m.jobs = make([]chan eventJob, n)
+	for i := range m.jobs {
+		m.jobs[i] = make(chan eventJob, max(1, 30000/n))
+		m.daemonWg.Add(1)
+		go m.workerLoop(m.jobs[i])
 	}
 }
 
+func (m *Manager) eventQueue(endpointID int64) chan eventJob {
+	return m.jobs[uint64(endpointID)%uint64(len(m.jobs))]
+}
+
 // workerLoop 持续从 m.jobs 获取事件并处理
-func (m *Manager) workerLoop() {
-	for job := range m.jobs {
-		m.processPayload(job.endpointID, job.payload)
+func (m *Manager) workerLoop(jobs <-chan eventJob) {
+	defer m.daemonWg.Done()
+	for {
+		select {
+		case <-m.daemonCtx.Done():
+			return
+		case job := <-jobs:
+			m.processPayload(job.endpointID, job.payload)
+		}
 	}
 }
 

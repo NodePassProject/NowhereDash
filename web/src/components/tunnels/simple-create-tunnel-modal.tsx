@@ -10,6 +10,7 @@ import {
   Select,
   SelectItem,
   Spinner,
+  Switch,
   Tab,
   Tabs,
   Tooltip,
@@ -27,6 +28,13 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { buildApiUrl } from "@/lib/utils";
+import {
+  parseNextEndpoint,
+  portalServiceEndpoint,
+  validateServiceEndpoint,
+  validateSocksEndpoint,
+  validatePortalSNI,
+} from "@/lib/portal-url";
 
 interface EndpointSimple {
   id: string | number;
@@ -45,13 +53,16 @@ interface PortalForm {
   apiEndpoint: string;
   tunnelName: string;
   listenHost: string;
-  listenPort: string;
+  tcpPort: string;
+  udpPort: string;
+  tcpFamily: string;
+  udpFamily: string;
+  morph: string;
   sharedKey: string;
   network: string;
   tlsMode: string;
   certPath: string;
   keyPath: string;
-  alpn: string;
   rate: string;
   etar: string;
   dial: string;
@@ -81,20 +92,23 @@ const INITIAL_FORM: PortalForm = {
   apiEndpoint: "",
   tunnelName: "",
   listenHost: "",
-  listenPort: "",
+  tcpPort: "",
+  udpPort: "",
+  tcpFamily: "any",
+  udpFamily: "any",
+  morph: "0",
   sharedKey: "",
   network: "mix",
   tlsMode: "1",
   certPath: "",
   keyPath: "",
-  alpn: "",
   rate: "",
   etar: "",
   dial: "",
   socks: "",
   next: "",
-  up: "udp",
-  down: "udp",
+  up: "",
+  down: "",
   mux: "0",
   sni: "",
   pin: "",
@@ -169,18 +183,17 @@ function LabelWithHelp({ label, help }: LabelWithHelpProps) {
         isOpen={isHelpOpen}
         placement="top"
       >
-        <span
+        <button
           aria-label={help}
           className="inline-flex cursor-help text-default-400"
-          role="img"
-          tabIndex={0}
+          type="button"
           onBlur={() => setIsHelpOpen(false)}
           onFocus={() => setIsHelpOpen(true)}
           onPointerEnter={() => setIsHelpOpen(true)}
           onPointerLeave={() => setIsHelpOpen(false)}
         >
           <Icon icon="lucide:circle-help" width={13} />
-        </span>
+        </button>
       </Tooltip>
     </span>
   );
@@ -243,20 +256,27 @@ export default function SimpleCreateTunnelModal({
             randomPort: "随机生成监听端口",
             sharedKey: "共享密钥",
             generate: "生成密钥",
-            network: "传输模式",
+            network: "监听载体",
+            tcpPort: "TCP 端口",
+            udpPort: "UDP 端口",
+            family: "地址族",
+            anyFamily: "IPv4 / IPv6",
+            automatic: "自动",
+            morph: "Morph",
+            morphHint: "同一跳两端须使用相同 Morph 设置；也应用于原生下级隧道",
             tls: "TLS 模式",
             log: "日志级别",
             cert: "证书路径",
             key: "私钥路径",
             optional: "可选配置",
-            alpn: "ALPN",
             dial: "出口地址",
             rate: "入口限速 (Mbps)",
             etar: "出口限速 (Mbps)",
             socks: "SOCKS 出口",
             socksHint: "与下级隧道互斥",
             next: "下级隧道",
-            nextHint: "格式:shared-key@host:port; 与 SOCKS出口互斥",
+            nextHint:
+              "shared-key@host:port 或 shared-key@host/tcp:port/udp:port；与 SOCKS 出口互斥",
             up: "上行载体",
             down: "下行载体",
             mux: "TLS Mux",
@@ -293,13 +313,20 @@ export default function SimpleCreateTunnelModal({
             randomPort: "Generate a random listen port",
             sharedKey: "Shared key",
             generate: "Generate key",
-            network: "Transport mode",
+            network: "Listener carriers",
+            tcpPort: "TCP port",
+            udpPort: "UDP port",
+            family: "Address family",
+            anyFamily: "IPv4 / IPv6",
+            automatic: "Auto",
+            morph: "Morph",
+            morphHint:
+              "Both ends of each hop must use the same Morph setting; also applies to the native next hop",
             tls: "TLS mode",
             log: "Log level",
             cert: "Certificate path",
             key: "Private key path",
             optional: "Optional Configuration",
-            alpn: "ALPN",
             dial: "Outbound address",
             rate: "Ingress rate (Mbps)",
             etar: "Egress rate (Mbps)",
@@ -307,7 +334,7 @@ export default function SimpleCreateTunnelModal({
             socksHint: "Mutually exclusive with Next Tunnel",
             next: "Next Tunnel",
             nextHint:
-              "Format: shared-key@host:port; mutually exclusive with SOCKS",
+              "shared-key@host:port or shared-key@host/tcp:port/udp:port; mutually exclusive with SOCKS",
             up: "Up carrier",
             down: "Down carrier",
             mux: "TLS Mux",
@@ -348,12 +375,15 @@ export default function SimpleCreateTunnelModal({
       const next = { ...current, [key]: value };
 
       if (next.up === "udp" && next.down === "udp") next.mux = "0";
+
       return next;
     });
   }, []);
 
   useEffect(() => {
     if (!isOpen) return;
+    const controller = new AbortController();
+    const { signal } = controller;
 
     const load = async () => {
       setLoading(true);
@@ -365,36 +395,50 @@ export default function SimpleCreateTunnelModal({
       try {
         const endpointResponse = await fetch(
           buildApiUrl("/api/endpoints/simple?excludeFailed=true"),
+          { signal },
         );
 
         if (!endpointResponse.ok) throw new Error("Failed to load nodes");
         const endpointData =
           (await endpointResponse.json()) as EndpointSimple[];
 
+        if (signal.aborted) return;
+
         setEndpoints(endpointData);
 
         if (mode === "edit" && instanceId) {
           const response = await fetch(
             buildApiUrl(`/api/tunnels/${instanceId}/details`),
+            { signal },
           );
           const body = await response.json();
+
+          if (signal.aborted) return;
 
           if (!response.ok)
             throw new Error(body.error || "Failed to load Tunnel");
           const tunnel = body.tunnel ?? body;
+          const listener = portalServiceEndpoint(tunnel);
 
           setRealTunnelId(String(tunnel.id ?? instanceId));
           setForm({
             apiEndpoint: String(tunnel.endpointId ?? body.endpoint?.id ?? ""),
             tunnelName: tunnel.name ?? "",
-            listenHost: tunnel.listenHost ?? "",
-            listenPort: String(tunnel.listenPort ?? ""),
+            listenHost: listener.host,
+            tcpPort: listener.tcpPort,
+            udpPort: listener.udpPort,
+            tcpFamily: listener.tcpFamily,
+            udpFamily: listener.udpFamily,
+            morph: String(tunnel.morph ?? "0"),
             sharedKey: tunnel.sharedKey ?? "",
-            network: tunnel.network ?? "mix",
+            network: !listener.tcpPort
+              ? "udp"
+              : !listener.udpPort
+                ? "tcp"
+                : "mix",
             tlsMode: String(tunnel.tlsMode ?? "1"),
             certPath: tunnel.certPath ?? "",
             keyPath: tunnel.keyPath ?? "",
-            alpn: tunnel.alpn ?? "now/1",
             rate: String(tunnel.rate ?? 0),
             etar: String(tunnel.etar ?? 0),
             dial: tunnel.dial ?? "auto",
@@ -403,8 +447,8 @@ export default function SimpleCreateTunnelModal({
               tunnel.next && tunnel.next.toLowerCase() !== "none"
                 ? tunnel.next
                 : "",
-            up: tunnel.up ?? "udp",
-            down: tunnel.down ?? "udp",
+            up: tunnel.up ?? "",
+            down: tunnel.down ?? "",
             mux: String(tunnel.mux ?? "0"),
             sni: tunnel.sni ?? "none",
             pin:
@@ -419,41 +463,51 @@ export default function SimpleCreateTunnelModal({
             peer: tunnel.peer ?? null,
           });
         } else {
+          const port = randomListenPort();
+
           setForm({
             ...INITIAL_FORM,
             apiEndpoint: endpointData.length ? String(endpointData[0].id) : "",
-            listenPort: randomListenPort(),
+            tcpPort: port,
+            udpPort: port,
             sharedKey: randomSharedKey(),
           });
         }
       } catch (error) {
+        if (signal.aborted) return;
         addToast({
           title: copy.failure,
           description: error instanceof Error ? error.message : copy.failure,
           color: "danger",
         });
       } finally {
-        setLoading(false);
+        if (!signal.aborted) setLoading(false);
       }
     };
 
     void load();
+
+    return () => controller.abort();
   }, [copy.failure, instanceId, isOpen, mode]);
 
   const validate = () => {
     if (
       !form.apiEndpoint ||
       !form.tunnelName.trim() ||
-      !form.listenPort ||
+      (form.network !== "udp" && !form.tcpPort) ||
+      (form.network !== "tcp" && !form.udpPort) ||
       !form.sharedKey
     ) {
       throw new Error(copy.required);
     }
 
-    const port = Number(form.listenPort);
-
-    if (!Number.isInteger(port) || port < 1 || port > 65535)
-      throw new Error(copy.invalid);
+    validateServiceEndpoint({
+      host: form.listenHost.trim() || "*",
+      tcpPort: form.network === "udp" ? "" : form.tcpPort,
+      udpPort: form.network === "tcp" ? "" : form.udpPort,
+      tcpFamily: form.tcpFamily,
+      udpFamily: form.udpFamily,
+    });
     if (new TextEncoder().encode(form.sharedKey).length > 255)
       throw new Error(copy.invalid);
     if (form.tlsMode === "2" && (!form.certPath.trim() || !form.keyPath.trim()))
@@ -461,7 +515,12 @@ export default function SimpleCreateTunnelModal({
 
     const rate = Number(form.rate || 0);
     const etar = Number(form.etar || 0);
-    if (![rate, etar].every(Number.isInteger) || rate < 0 || etar < 0)
+
+    if (
+      ![rate, etar].every(
+        (value) => Number.isInteger(value) && value >= 0 && value <= 2147483647,
+      )
+    )
       throw new Error(copy.invalid);
     if (form.mux !== "0" && form.mux !== "1") throw new Error(copy.invalid);
     const socksConfigured =
@@ -470,7 +529,23 @@ export default function SimpleCreateTunnelModal({
       form.next.trim() !== "" && form.next.trim().toLowerCase() !== "none";
 
     if (socksConfigured && nextConfigured) throw new Error(copy.invalid);
+    if (socksConfigured) validateSocksEndpoint(form.socks.trim());
+    if (nextConfigured) {
+      const endpoint = parseNextEndpoint(form.next.trim());
+
+      validatePortalSNI(form.sni.trim());
+
+      for (const carrier of [form.up, form.down]) {
+        if (
+          carrier &&
+          ((carrier !== "udp" && !endpoint.tcpPort) ||
+            (carrier !== "tcp" && !endpoint.udpPort))
+        )
+          throw new Error(copy.invalid);
+      }
+    }
     if (
+      nextConfigured &&
       form.pin.trim() !== "" &&
       form.pin.trim().toLowerCase() !== "none" &&
       !/^[a-f0-9]{64}$/.test(form.pin.trim())
@@ -479,6 +554,7 @@ export default function SimpleCreateTunnelModal({
   };
 
   const submit = async () => {
+    if (loading || submitting || (mode === "edit" && !realTunnelId)) return;
     try {
       validate();
       const tags = textToTags(form.tagsText);
@@ -498,13 +574,15 @@ export default function SimpleCreateTunnelModal({
             endpointId: Number(form.apiEndpoint),
             name: form.tunnelName.trim(),
             listenHost: form.listenHost.trim(),
-            listenPort: form.listenPort,
+            tcpPort: form.network === "udp" ? "" : form.tcpPort,
+            udpPort: form.network === "tcp" ? "" : form.udpPort,
+            tcpFamily: form.tcpFamily,
+            udpFamily: form.udpFamily,
+            morph: form.morph,
             sharedKey: form.sharedKey,
-            network: form.network,
             tlsMode: form.tlsMode,
             certPath: form.tlsMode === "2" ? form.certPath.trim() : "",
             keyPath: form.tlsMode === "2" ? form.keyPath.trim() : "",
-            alpn: form.alpn.trim() || undefined,
             rate: form.rate !== "" ? Number(form.rate) : undefined,
             etar: form.etar !== "" ? Number(form.etar) : undefined,
             dial: form.dial.trim() || undefined,
@@ -512,7 +590,7 @@ export default function SimpleCreateTunnelModal({
             next: form.next.trim() || "none",
             up: form.up,
             down: form.down,
-            mux: form.mux,
+            mux: udpOnlyNext ? "0" : form.mux,
             sni: form.sni.trim() || undefined,
             pin: form.pin.trim() || "none",
             logLevel: form.logLevel,
@@ -544,7 +622,26 @@ export default function SimpleCreateTunnelModal({
 
   const nextEnabled =
     form.next.trim() !== "" && form.next.trim().toLowerCase() !== "none";
-  const udpOnlyNext = form.up === "udp" && form.down === "udp";
+  let nextEndpoint = null;
+
+  try {
+    if (nextEnabled) nextEndpoint = parseNextEndpoint(form.next.trim());
+  } catch {
+    /* Validated on submit. */
+  }
+  const defaultCarrier = nextEndpoint && !nextEndpoint.tcpPort ? "udp" : "tcp";
+  const udpOnlyNext =
+    (form.up || defaultCarrier) === "udp" &&
+    (form.down || defaultCarrier) === "udp";
+  const unavailableCarriers = nextEndpoint
+    ? new Set(
+        [
+          !nextEndpoint.tcpPort ? "tcp" : "",
+          !nextEndpoint.udpPort ? "udp" : "",
+          !nextEndpoint.tcpPort || !nextEndpoint.udpPort ? "mix" : "",
+        ].filter(Boolean),
+      )
+    : new Set<string>();
 
   return (
     <Modal
@@ -632,38 +729,28 @@ export default function SimpleCreateTunnelModal({
                     >
                       <Input
                         aria-label={copy.listenHost}
-                        placeholder="0.0.0.0"
+                        placeholder="*"
                         value={form.listenHost}
                         onValueChange={(value) => update("listenHost", value)}
                       />
                     </FormField>
 
-                    <FormField required label={copy.listenPort}>
-                      <Input
-                        isRequired
-                        aria-label={copy.listenPort}
-                        endContent={
-                          <Tooltip content={copy.randomPort}>
-                            <Button
-                              isIconOnly
-                              aria-label={copy.randomPort}
-                              size="sm"
-                              type="button"
-                              variant="light"
-                              onPress={() =>
-                                update("listenPort", randomListenPort())
-                              }
-                            >
-                              <Icon icon="lucide:dices" width={17} />
-                            </Button>
-                          </Tooltip>
+                    <FormField label={copy.network}>
+                      <Tabs
+                        fullWidth
+                        aria-label={copy.network}
+                        classNames={{ tabList: "h-10", tab: "h-8" }}
+                        color="secondary"
+                        selectedKey={form.network}
+                        size="sm"
+                        onSelectionChange={(key) =>
+                          update("network", String(key))
                         }
-                        max={65535}
-                        min={1}
-                        type="number"
-                        value={form.listenPort}
-                        onValueChange={(value) => update("listenPort", value)}
-                      />
+                      >
+                        <Tab key="mix" title="TCP + UDP" />
+                        <Tab key="tcp" title="TCP" />
+                        <Tab key="udp" title="UDP" />
+                      </Tabs>
                     </FormField>
 
                     <FormField
@@ -727,27 +814,62 @@ export default function SimpleCreateTunnelModal({
                       />
                     </FormField>
 
-                    <FormField label={copy.network}>
-                      <Tabs
-                        fullWidth
-                        aria-label={copy.network}
-                        className="text-xs"
-                        classNames={{
-                          tabList: "h-10",
-                          tab: "h-8",
-                        }}
-                        color="secondary"
-                        selectedKey={form.network}
-                        size="sm"
-                        onSelectionChange={(key) =>
-                          update("network", String(key))
-                        }
-                      >
-                        <Tab key="mix" title="mix" />
-                        <Tab key="tcp" title="tcp" />
-                        <Tab key="udp" title="udp" />
-                      </Tabs>
-                    </FormField>
+                    {(["tcp", "udp"] as const).map((carrier) => {
+                      const disabled =
+                        form.network !== "mix" && form.network !== carrier;
+                      const portKey = `${carrier}Port` as const;
+                      const familyKey = `${carrier}Family` as const;
+                      const familyLabel = `${carrier.toUpperCase()} ${copy.family}`;
+
+                      return (
+                        <div key={carrier} className="min-w-0 space-y-2">
+                          <FormField label={copy[portKey]} required={!disabled}>
+                            <Input
+                              aria-label={copy[portKey]}
+                              endContent={
+                                <Tooltip content={copy.randomPort}>
+                                  <Button
+                                    isIconOnly
+                                    aria-label={`${carrier.toUpperCase()} ${copy.randomPort}`}
+                                    isDisabled={disabled}
+                                    size="sm"
+                                    variant="light"
+                                    onPress={() =>
+                                      update(portKey, randomListenPort())
+                                    }
+                                  >
+                                    <Icon icon="lucide:dices" width={17} />
+                                  </Button>
+                                </Tooltip>
+                              }
+                              isDisabled={disabled}
+                              isRequired={!disabled}
+                              max={65535}
+                              min={1}
+                              type="number"
+                              value={form[portKey]}
+                              onValueChange={(value) => update(portKey, value)}
+                            />
+                          </FormField>
+                          <Select
+                            aria-label={familyLabel}
+                            isDisabled={disabled}
+                            label={familyLabel}
+                            selectedKeys={new Set([form[familyKey]])}
+                            onSelectionChange={(keys) =>
+                              update(
+                                familyKey,
+                                String(Array.from(keys)[0] ?? "any"),
+                              )
+                            }
+                          >
+                            <SelectItem key="any">{copy.anyFamily}</SelectItem>
+                            <SelectItem key="4">IPv4</SelectItem>
+                            <SelectItem key="6">IPv6</SelectItem>
+                          </Select>
+                        </div>
+                      );
+                    })}
 
                     <FormField label={copy.tls}>
                       <Select
@@ -760,6 +882,27 @@ export default function SimpleCreateTunnelModal({
                         <SelectItem key="1">{copy.tlsMemory}</SelectItem>
                         <SelectItem key="2">{copy.tlsFiles}</SelectItem>
                       </Select>
+                    </FormField>
+
+                    <FormField
+                      label={
+                        <LabelWithHelp
+                          help={copy.morphHint}
+                          label={copy.morph}
+                        />
+                      }
+                    >
+                      <div className="flex h-10 items-center px-1">
+                        <Switch
+                          aria-label={copy.morph}
+                          isSelected={form.morph === "1"}
+                          onValueChange={(enabled) =>
+                            update("morph", enabled ? "1" : "0")
+                          }
+                        >
+                          {form.morph === "1" ? copy.enabled : copy.disabled}
+                        </Switch>
+                      </div>
                     </FormField>
 
                     {form.tlsMode === "2" && (
@@ -855,14 +998,7 @@ export default function SimpleCreateTunnelModal({
                           height: { duration: 0.3, ease: "easeInOut" },
                         }}
                       >
-                        <section className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                          <Input
-                            aria-label={copy.alpn}
-                            label={copy.alpn}
-                            placeholder="now/1"
-                            value={form.alpn}
-                            onValueChange={(value) => update("alpn", value)}
-                          />
+                        <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <Input
                             aria-label={copy.rate}
                             label={copy.rate}
@@ -883,10 +1019,9 @@ export default function SimpleCreateTunnelModal({
                           />
                         </section>
 
-                        <section className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <section className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <Input
                             aria-label={copy.socks}
-                            className="sm:col-span-2"
                             label={copy.socks}
                             placeholder="none"
                             value={form.socks}
@@ -911,7 +1046,7 @@ export default function SimpleCreateTunnelModal({
                                 label={copy.next}
                               />
                             }
-                            placeholder="node"
+                            placeholder="key@host/tcp:2006/udp:2017"
                             value={form.next}
                             onValueChange={(value) =>
                               setForm((current) => ({
@@ -947,7 +1082,9 @@ export default function SimpleCreateTunnelModal({
                                   />
                                 }
                                 labelPlacement="inside"
-                                selectedKeys={new Set([form.mux])}
+                                selectedKeys={
+                                  new Set([udpOnlyNext ? "0" : form.mux])
+                                }
                                 onSelectionChange={(keys) =>
                                   update(
                                     "mux",
@@ -960,32 +1097,44 @@ export default function SimpleCreateTunnelModal({
                               </Select>
                               <Select
                                 aria-label={copy.up}
+                                disabledKeys={unavailableCarriers}
                                 label={copy.up}
                                 labelPlacement="inside"
-                                selectedKeys={new Set([form.up])}
+                                selectedKeys={new Set([form.up || "auto"])}
                                 onSelectionChange={(keys) =>
                                   updateCarrier(
                                     "up",
-                                    String(Array.from(keys)[0] ?? "udp"),
+                                    String(
+                                      Array.from(keys)[0] ?? "auto",
+                                    ).replace(/^auto$/, ""),
                                   )
                                 }
                               >
+                                <SelectItem key="auto">
+                                  {copy.automatic}
+                                </SelectItem>
                                 <SelectItem key="mix">mix</SelectItem>
                                 <SelectItem key="tcp">tcp</SelectItem>
                                 <SelectItem key="udp">udp</SelectItem>
                               </Select>
                               <Select
                                 aria-label={copy.down}
+                                disabledKeys={unavailableCarriers}
                                 label={copy.down}
                                 labelPlacement="inside"
-                                selectedKeys={new Set([form.down])}
+                                selectedKeys={new Set([form.down || "auto"])}
                                 onSelectionChange={(keys) =>
                                   updateCarrier(
                                     "down",
-                                    String(Array.from(keys)[0] ?? "udp"),
+                                    String(
+                                      Array.from(keys)[0] ?? "auto",
+                                    ).replace(/^auto$/, ""),
                                   )
                                 }
                               >
+                                <SelectItem key="auto">
+                                  {copy.automatic}
+                                </SelectItem>
                                 <SelectItem key="mix">mix</SelectItem>
                                 <SelectItem key="tcp">tcp</SelectItem>
                                 <SelectItem key="udp">udp</SelectItem>

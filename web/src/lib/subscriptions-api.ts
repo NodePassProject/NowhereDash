@@ -12,6 +12,11 @@ export interface PortalOption {
   instanceId?: string;
   listenHost: string;
   listenPort: string | number;
+  tcpPort?: string | null;
+  udpPort?: string | null;
+  tcpFamily?: string;
+  udpFamily?: string;
+  morph?: string;
   sharedKey?: string;
   network?: string;
   alpn?: string;

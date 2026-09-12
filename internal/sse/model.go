@@ -162,14 +162,15 @@ type Client struct {
 
 // Close 关闭客户端连接
 func (c *Client) Close() {
-	// 这里可以实现关闭逻辑，例如关闭Writer
-	// 目前是一个空实现
+	c.SetDisconnected(true)
 }
 
 // Send 发送数据给客户端
 func (c *Client) Send(data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// 检查客户端是否已断开
-	if c.IsDisconnected() {
+	if c.disconnected {
 		return errors.New("客户端已断开连接")
 	}
 
@@ -178,11 +179,14 @@ func (c *Client) Send(data []byte) error {
 	sseData := fmt.Sprintf("data: %s\n\n", string(data))
 
 	// 直接写入HTTP响应流
+	controller := http.NewResponseController(c.Writer)
+	_ = controller.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	defer controller.SetWriteDeadline(time.Time{})
 	_, err := c.Writer.Write([]byte(sseData))
 	if err != nil {
 		// 检查是否是连接断开相关的错误
 		if isConnectionError(err) {
-			c.SetDisconnected(true)
+			c.disconnected = true
 			return fmt.Errorf("客户端连接已断开: %v", err)
 		}
 		return fmt.Errorf("写入SSE数据失败: %v", err)

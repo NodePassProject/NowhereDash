@@ -10,236 +10,530 @@ export interface PortalTunnelLike {
   configLine?: string | null;
   listenHost?: string | null;
   listenPort?: string | number | null;
+  tcpPort?: string | null;
+  udpPort?: string | null;
+  tcpFamily?: string | null;
+  udpFamily?: string | null;
+  morph?: string | null;
   sharedKey?: string | null;
   network?: string | null;
-  alpn?: string | null;
+  tlsMode?: string | null;
+  certPath?: string | null;
+  keyPath?: string | null;
   rate?: string | number | null;
   etar?: string | number | null;
+  dial?: string | null;
+  socks?: string | null;
+  next?: string | null;
+  up?: string | null;
+  down?: string | null;
+  mux?: string | null;
+  sni?: string | null;
+  pin?: string | null;
   logLevel?: string | null;
   endpoint?: PortalEndpointLike | string | null;
 }
 
-const WILDCARD_HOSTS = new Set(["", "0.0.0.0", "::", "[::]", "*"]);
-const PORTAL_EFFECTIVE_QUERY_KEYS = new Set([
-  "net",
-  "tls",
-  "alpn",
-  "rate",
-  "etar",
-  "dial",
-  "socks",
-  "next",
-  "up",
-  "down",
-  "mux",
-  "sni",
-  "pin",
-]);
-const NEXT_ONLY_QUERY_KEYS = new Set(["up", "down", "mux", "sni", "pin"]);
-
-interface ParsedPortalUrl {
-  hostname: string;
-  port: string;
-  searchParams: URLSearchParams;
-  username: string;
+export interface ServiceEndpoint {
+  host: string;
+  tcpPort: string;
+  udpPort: string;
+  tcpFamily: string;
+  udpFamily: string;
 }
 
-const encodeValue = (value: string | number) =>
-  encodeURIComponent(String(value));
+const WILDCARD_HOSTS = new Set(["", "0.0.0.0", "::", "[::]", "*"]);
+const QUERY_DEFAULTS = {
+  tls: "1",
+  morph: "0",
+  rate: "0",
+  etar: "0",
+  dial: "auto",
+  socks: "none",
+  next: "none",
+};
+const NEXT_KEYS = new Set(["up", "down", "mux", "sni", "pin"]);
+const normalizeHost = (host: string) => {
+  if (host.startsWith("[") && host.endsWith("]")) {
+    try {
+      return new URL(`http://${host}`).hostname.slice(1, -1);
+    } catch {
+      return host;
+    }
+  }
 
+  return host;
+};
 const formatHost = (host: string) => {
-  const value = host.trim();
-
-  if (!value || (value.startsWith("[") && value.endsWith("]"))) return value;
+  const value = normalizeHost(host.trim());
 
   return value.includes(":") ? `[${value}]` : value;
 };
 
-const endpointHostname = (endpoint?: PortalEndpointLike | string | null) => {
-  if (!endpoint || typeof endpoint === "string") return "";
+export const formatServiceEndpoint = (endpoint: ServiceEndpoint) => {
+  const host = formatHost(endpoint.host || "*");
 
-  const configured = endpoint.hostname?.trim();
+  if (
+    endpoint.tcpPort &&
+    endpoint.tcpPort === endpoint.udpPort &&
+    endpoint.tcpFamily === "any" &&
+    endpoint.udpFamily === "any"
+  )
+    return `${host}:${endpoint.tcpPort}`;
 
-  if (configured && !WILDCARD_HOSTS.has(configured)) return configured;
+  return (
+    host +
+    (["tcp", "udp"] as const)
+      .map((carrier) => {
+        const port = endpoint[`${carrier}Port`];
+        const family = endpoint[`${carrier}Family`];
 
-  const rawUrl = endpoint.url?.trim();
+        return port
+          ? `/${carrier}${family === "any" ? "" : family}:${port}`
+          : "";
+      })
+      .join("")
+  );
+};
 
-  if (!rawUrl) return "";
+export const validateServiceEndpoint = (
+  endpoint: ServiceEndpoint,
+  allowWildcard = true,
+) => {
+  const host = normalizeHost(endpoint.host);
 
-  try {
-    return new URL(rawUrl).hostname;
-  } catch {
+  if (
+    !host ||
+    /[/@?#%[\]<>\s\\]/.test(host) ||
+    Array.from(host).some(
+      (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
+    )
+  )
+    throw new Error("Invalid endpoint host");
+  if (host.includes(":")) {
     try {
-      return new URL(`master://${rawUrl}`).hostname;
+      new URL(`http://[${host}]`);
     } catch {
-      return "";
+      throw new Error("Invalid endpoint IPv6 address");
     }
+  }
+  if (!allowWildcard && host === "*")
+    throw new Error("A remote endpoint requires a concrete host");
+  if (!endpoint.tcpPort && !endpoint.udpPort)
+    throw new Error("At least one TCP or UDP listener is required");
+  for (const carrier of ["tcp", "udp"] as const) {
+    const port = endpoint[`${carrier}Port`];
+    const family = endpoint[`${carrier}Family`];
+
+    if (!port) continue;
+    if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+      throw new Error(
+        `${carrier.toUpperCase()} port must be between 1 and 65535`,
+      );
+    if (!["any", "4", "6"].includes(family))
+      throw new Error("Invalid address family");
+    if (
+      (host.includes(":") && family === "4") ||
+      (/^\d+\.\d+\.\d+\.\d+$/.test(host) && family === "6")
+    )
+      throw new Error("Address family conflicts with the endpoint IP");
   }
 };
 
-const portalUrlFromCommand = (commandLine?: string | null) => {
-  if (!commandLine) return "";
+const parseServiceUrl = (raw: string, allowWildcard: boolean) => {
+  // WHATWG rejects the compact empty host alias; normalize it before parsing.
+  const normalized = raw.replace(/^(portal:\/\/(?:[^/?#]*@)?):/i, "$1*:");
+  const path =
+    normalized.split(/[?#]/, 1)[0].split("://")[1]?.split("/").slice(1) ?? [];
 
-  return commandLine.match(/portal:\/\/[^\s"']+/i)?.[0] ?? "";
-};
-
-/**
- * WHATWG URL rejects Nowhere's credential-free, empty-host runtime form
- * (`portal://:2077?...`), so Portal authorities need a small native parser.
- */
-const parsePortalUrl = (rawUrl: string): ParsedPortalUrl | null => {
-  const match = rawUrl
-    .trim()
-    .match(/^portal:\/\/([^/?#]*)(?:\?([^#]*))?(?:#.*)?$/i);
-
-  if (!match) return null;
-
-  const authority = match[1];
-  const separator = authority.lastIndexOf("@");
-  const encodedUsername = separator >= 0 ? authority.slice(0, separator) : "";
-  const hostAndPort =
-    separator >= 0 ? authority.slice(separator + 1) : authority;
-  let hostname = "";
-  let port = "";
-
-  if (hostAndPort.startsWith("[")) {
-    const ipv6 = hostAndPort.match(/^\[([^\]]*)\](?::(\d+))?$/);
-
-    if (!ipv6) return null;
-    hostname = ipv6[1];
-    port = ipv6[2] ?? "";
-  } else {
-    const colon = hostAndPort.lastIndexOf(":");
-
-    if (colon < 0) {
-      hostname = hostAndPort;
-    } else {
-      hostname = hostAndPort.slice(0, colon);
-      port = hostAndPort.slice(colon + 1);
-      if (!/^\d+$/.test(port) || hostname.includes(":")) return null;
-    }
-  }
-
-  let username = encodedUsername;
-
-  try {
-    username = decodeURIComponent(encodedUsername);
-  } catch {
-    // Keep malformed credentials usable as an opaque fallback value.
-  }
-
-  return {
-    hostname,
-    port,
-    searchParams: new URLSearchParams(match[2] ?? ""),
-    username,
+  if (path.some((segment) => !/^(tcp|udp)[46]?:\d+$/.test(segment)))
+    throw new Error("Invalid carrier path");
+  const parsed = new URL(normalized);
+  const endpoint: ServiceEndpoint = {
+    host: normalizeHost(parsed.hostname),
+    tcpPort: "",
+    udpPort: "",
+    tcpFamily: "any",
+    udpFamily: "any",
   };
+
+  if (path.length) {
+    if (parsed.port)
+      throw new Error("Authority port and carrier path cannot be combined");
+    for (const segment of path) {
+      const [name, port] = segment.split(":");
+      const carrier = name.slice(0, 3) as "tcp" | "udp";
+
+      if (endpoint[`${carrier}Port`]) throw new Error("Duplicate carrier");
+      endpoint[`${carrier}Port`] = String(Number(port));
+      endpoint[`${carrier}Family`] = name.slice(3) || "any";
+    }
+  } else {
+    endpoint.tcpPort = parsed.port;
+    endpoint.udpPort = parsed.port;
+  }
+  validateServiceEndpoint(endpoint, allowWildcard);
+
+  return { parsed, endpoint };
 };
 
-const normalizePortalHost = (host: string) => {
-  const value = host.replace(/^\[|\]$/g, "").toLowerCase();
+export const parseNextEndpoint = (value: string) => {
+  if ((value.match(/@/g) ?? []).length !== 1 || /[?#&\s]/.test(value))
+    throw new Error("Next requires one encoded shared key and endpoint");
+  const { parsed, endpoint } = parseServiceUrl(`vector://${value}`, false);
 
-  return WILDCARD_HOSTS.has(value) ? "" : value;
+  if (!parsed.username || parsed.password || value.split("@")[0].includes(":"))
+    throw new Error("Invalid next shared key");
+  if (
+    new TextEncoder().encode(decodeURIComponent(parsed.username)).length > 255
+  )
+    throw new Error("Shared key must contain 1 to 255 bytes");
+
+  return endpoint;
 };
 
-const withoutAuthorityCredential = (value: string) => {
-  const separator = value.lastIndexOf("@");
+export const validateSocksEndpoint = (
+  value: string,
+  allowEmptyHost = false,
+) => {
+  if (!value || value === "none") return;
+  if (/[&?#\s]/.test(value))
+    throw new Error("Reserved SOCKS characters must be percent-encoded");
+  const parts = value.split("@");
 
-  return separator >= 0 ? value.slice(separator + 1) : value;
+  if (parts.length > 2) throw new Error("Invalid SOCKS credentials");
+  if (parts.length === 2) {
+    const credentials = parts[0].split(":");
+
+    if (credentials.length !== 2)
+      throw new Error("SOCKS requires USERNAME:PASSWORD");
+    for (const credential of credentials) {
+      const size = new TextEncoder().encode(
+        decodeURIComponent(credential),
+      ).length;
+
+      if (size < 1 || size > 255 || /[:/?#[\]@!$&'()*+,;=\s]/.test(credential))
+        throw new Error(
+          "SOCKS credentials require percent-encoded reserved characters",
+        );
+    }
+  }
+  const endpoint = decodeURIComponent(parts.at(-1)!);
+  const normalized =
+    allowEmptyHost && endpoint.startsWith(":")
+      ? `127.0.0.1${endpoint}`
+      : endpoint;
+  const { parsed } = parseServiceUrl(`socks://${normalized}`, false);
+
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname ||
+    parsed.search ||
+    parsed.hash
+  )
+    throw new Error("SOCKS requires HOST:PORT");
 };
 
-const comparablePortalQueryValue = (key: string, value: string) =>
-  key === "socks" || key === "next" ? withoutAuthorityCredential(value) : value;
+export const validatePortalSNI = (value: string) => {
+  if (!value || value === "none") return;
+  if (
+    value.length > 253 ||
+    /[^\x20-\x7E]|[:[\]]/.test(value) ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(value)
+  )
+    throw new Error("SNI must be an ASCII DNS name");
+};
 
+// Native queries keep '+' literal and decode nested credentials only after
+// splitting their authority delimiters.
+const portalQuery = (parsed: URL) => {
+  const values = new Map<string, string>();
+  const read = (allowed: Set<string>) => {
+    for (const pair of parsed.search.slice(1).split("&")) {
+      const separator = pair.indexOf("=");
+      const rawKey = separator < 0 ? pair : pair.slice(0, separator);
+      const rawValue = separator < 0 ? "" : pair.slice(separator + 1);
+      let key: string;
+
+      try {
+        key = decodeURIComponent(rawKey);
+      } catch {
+        continue;
+      }
+      if (!allowed.has(key) || values.has(key)) continue;
+      const value = decodeURIComponent(rawValue);
+
+      values.set(
+        key,
+        (key === "next" || key === "socks") && value !== "none"
+          ? rawValue
+          : value,
+      );
+    }
+  };
+
+  read(new Set([...Object.keys(QUERY_DEFAULTS), "crt", "key", "log"]));
+  if (values.has("next") && values.get("next") !== "none") read(NEXT_KEYS);
+
+  return values;
+};
+
+const encodeComponent = (value: string) =>
+  encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+const encodeNativeQuery = (query: URLSearchParams) =>
+  Array.from(
+    query,
+    ([key, value]) =>
+      `${encodeComponent(key)}=${
+        key === "next" || key === "socks" ? value : encodeComponent(value)
+      }`,
+  ).join("&");
+
+const portalUrlFromCommand = (command?: string | null) => {
+  const value = command?.trim() ?? "";
+
+  return /^portal:\/\//i.test(value)
+    ? value
+    : (value.match(/portal:\/\/[^\s"']+/i)?.[0] ?? "");
+};
+
+const parsePortalUrl = (raw: string) => {
+  try {
+    const result = parseServiceUrl(raw, true);
+
+    if (result.parsed.protocol !== "portal:") return null;
+    decodeURIComponent(result.parsed.username);
+
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+const withoutCredential = (value: string) =>
+  value.slice(value.lastIndexOf("@") + 1);
+const comparablePortalQuery = (parsed: URL) => {
+  const query = portalQuery(parsed);
+  const values = new Map<string, string>(
+    Object.entries(QUERY_DEFAULTS).map(([key, fallback]) => [
+      key,
+      query.get(key) ?? fallback,
+    ]),
+  );
+
+  if (values.get("socks") !== "none") {
+    const endpoint = decodeURIComponent(
+      withoutCredential(values.get("socks")!),
+    );
+
+    validateSocksEndpoint(values.get("socks")!);
+    values.set(
+      "socks",
+      formatServiceEndpoint(
+        parseServiceUrl(`socks://${endpoint}`, false).endpoint,
+      ),
+    );
+  }
+  if (values.get("next") !== "none") {
+    const { endpoint } = parseServiceUrl(
+      `vector://${withoutCredential(values.get("next")!)}`,
+      false,
+    );
+    const carrier = endpoint.tcpPort ? "tcp" : "udp";
+
+    values.set("next", formatServiceEndpoint(endpoint));
+    for (const [key, fallback] of Object.entries({
+      up: carrier,
+      down: carrier,
+      mux: "0",
+      sni: "none",
+      pin: "none",
+    }))
+      values.set(key, query.get(key) || fallback);
+    if (values.get("up") === "udp" && values.get("down") === "udp")
+      values.set("mux", "0");
+  }
+  for (const key of ["rate", "etar"])
+    values.set(key, String(Number(values.get(key))));
+  if (values.get("dial")?.includes(":"))
+    values.set("dial", normalizeHost(`[${values.get("dial")}]`));
+
+  return values;
+};
 const portalUrlsMatch = (commandURL: string, configURL: string) => {
   const command = parsePortalUrl(commandURL);
   const config = parsePortalUrl(configURL);
 
-  if (!command || !config) return false;
-
   if (
-    command.port !== config.port ||
-    normalizePortalHost(command.hostname) !==
-      normalizePortalHost(config.hostname)
-  ) {
+    !command ||
+    !config ||
+    formatServiceEndpoint(command.endpoint) !==
+      formatServiceEndpoint(config.endpoint)
+  )
+    return false;
+  if (
+    config.parsed.username &&
+    decodeURIComponent(config.parsed.username) !==
+      decodeURIComponent(command.parsed.username)
+  )
+    return false;
+  try {
+    const expected = comparablePortalQuery(command.parsed);
+    const actual = comparablePortalQuery(config.parsed);
+
+    return Array.from(expected).every(
+      ([key, value]) => actual.get(key) === value,
+    );
+  } catch {
     return false;
   }
-
-  // Current Nowhere releases redact the Portal credential. Older compatible
-  // emitters may still return it, in which case it must identify this command.
-  if (config.username && config.username !== command.username) return false;
-
-  const commandNext = command.searchParams.get("next");
-  const nextEnabled = Boolean(commandNext && commandNext !== "none");
-
-  for (const key of new Set(command.searchParams.keys())) {
-    if (!PORTAL_EFFECTIVE_QUERY_KEYS.has(key)) continue;
-    if (!nextEnabled && NEXT_ONLY_QUERY_KEYS.has(key)) continue;
-
-    const commandValue = command.searchParams.get(key);
-    const configValue = config.searchParams.get(key);
-
-    if (
-      commandValue == null ||
-      configValue == null ||
-      comparablePortalQueryValue(key, commandValue) !==
-        comparablePortalQueryValue(key, configValue)
-    ) {
-      return false;
-    }
-  }
-
-  return true;
 };
 
 const portalUrlFromTunnel = (tunnel: PortalTunnelLike) => {
-  const commandURL =
+  const command =
     portalUrlFromCommand(tunnel.commandURL) ||
     portalUrlFromCommand(tunnel.commandLine);
-  const configURL =
+  const config =
     portalUrlFromCommand(tunnel.configURL) ||
     portalUrlFromCommand(tunnel.configLine);
 
-  return configURL && (!commandURL || portalUrlsMatch(commandURL, configURL))
-    ? configURL
-    : commandURL;
+  return config && (!command || portalUrlsMatch(command, config))
+    ? config
+    : command;
 };
 
-const valuesFromPortalUrl = (portalUrl: string) => {
-  const parsed = parsePortalUrl(portalUrl);
+export const portalServiceEndpoint = (
+  tunnel: PortalTunnelLike,
+): ServiceEndpoint => {
+  const fromUrl = parsePortalUrl(portalUrlFromTunnel(tunnel));
 
-  if (!parsed) return {};
+  if (fromUrl) return fromUrl.endpoint;
+  const legacy = tunnel.tcpPort == null && tunnel.udpPort == null;
+  const port = String(tunnel.listenPort ?? "");
 
   return {
-    sharedKey: parsed.username,
-    listenHost: parsed.hostname,
-    listenPort: parsed.port,
-    network: parsed.searchParams.get("net") ?? undefined,
-    alpn: parsed.searchParams.get("alpn") ?? undefined,
-    rate: parsed.searchParams.get("rate") ?? undefined,
-    etar: parsed.searchParams.get("etar") ?? undefined,
-    logLevel: parsed.searchParams.get("log") ?? undefined,
+    host: normalizeHost(tunnel.listenHost || "*"),
+    tcpPort: legacy
+      ? tunnel.network === "udp"
+        ? ""
+        : port
+      : (tunnel.tcpPort ?? ""),
+    udpPort: legacy
+      ? tunnel.network === "tcp"
+        ? ""
+        : port
+      : (tunnel.udpPort ?? ""),
+    tcpFamily: tunnel.tcpFamily || "any",
+    udpFamily: tunnel.udpFamily || "any",
   };
 };
 
-export const buildPortalUrl = (tunnel: PortalTunnelLike) => {
-  const existing = portalUrlFromTunnel(tunnel);
+export const portalNetworkLabel = (tunnel: PortalTunnelLike) => {
+  const endpoint = portalServiceEndpoint(tunnel);
 
-  if (existing) return existing;
-
-  const host = formatHost(tunnel.listenHost?.trim() ?? "");
-  const port = tunnel.listenPort == null ? "" : String(tunnel.listenPort);
-  const sharedKey = tunnel.sharedKey?.trim() ?? "";
-
-  if (!port || !sharedKey) return "";
-
-  return `portal://${encodeValue(sharedKey)}@${host}:${port}`;
+  return [endpoint.tcpPort ? "TCP" : "", endpoint.udpPort ? "UDP" : ""]
+    .filter(Boolean)
+    .join(" + ");
 };
 
-/**
- * Builds a native Vector URL for a Portal. Portal upstream sni/pin values are
- * deliberately not inherited: they describe the Portal's own `next` hop.
- */
+export const portalListenerAddresses = (tunnel: PortalTunnelLike) => {
+  const endpoint = portalServiceEndpoint(tunnel);
+  const canonical = formatServiceEndpoint(endpoint);
+
+  if (!canonical.includes("/")) return [canonical];
+
+  return [
+    endpoint.tcpPort ? formatServiceEndpoint({ ...endpoint, udpPort: "" }) : "",
+    endpoint.udpPort ? formatServiceEndpoint({ ...endpoint, tcpPort: "" }) : "",
+  ].filter(Boolean);
+};
+
+export const buildPortalUrl = (tunnel: PortalTunnelLike) => {
+  const existing =
+    portalUrlFromCommand(tunnel.commandURL) ||
+    portalUrlFromCommand(tunnel.commandLine);
+
+  if (existing) return existing;
+  if (!tunnel.sharedKey) return "";
+  const endpoint = portalServiceEndpoint(tunnel);
+
+  try {
+    validateServiceEndpoint(endpoint);
+  } catch {
+    return "";
+  }
+  const query = new URLSearchParams({
+    tls: tunnel.tlsMode || "1",
+    morph: tunnel.morph || "0",
+  });
+
+  for (const key of [
+    "rate",
+    "etar",
+    "dial",
+    "socks",
+    "next",
+    "up",
+    "down",
+    "mux",
+    "sni",
+    "pin",
+  ] as const) {
+    if (tunnel[key] != null && tunnel[key] !== "")
+      query.set(key, String(tunnel[key]));
+  }
+  const next = tunnel.next && tunnel.next !== "none" ? tunnel.next : "none";
+
+  query.set("next", next);
+  if (next === "none") {
+    for (const key of NEXT_KEYS) query.delete(key);
+  } else {
+    try {
+      const endpoint = parseNextEndpoint(next);
+      const carrier = endpoint.tcpPort ? "tcp" : "udp";
+
+      query.set("up", tunnel.up || carrier);
+      query.set("down", tunnel.down || carrier);
+      query.set(
+        "mux",
+        query.get("up") === "udp" && query.get("down") === "udp"
+          ? "0"
+          : tunnel.mux || "0",
+      );
+    } catch {
+      return "";
+    }
+  }
+  try {
+    validateSocksEndpoint(tunnel.socks || "none");
+  } catch {
+    return "";
+  }
+  if (tunnel.tlsMode === "2") {
+    query.set("crt", tunnel.certPath || "");
+    query.set("key", tunnel.keyPath || "");
+  }
+  query.set("log", tunnel.logLevel || "info");
+
+  return `portal://${encodeComponent(tunnel.sharedKey)}@${formatServiceEndpoint(endpoint)}?${encodeNativeQuery(query)}`;
+};
+
+const endpointHostname = (endpoint?: PortalEndpointLike | string | null) => {
+  if (!endpoint || typeof endpoint === "string") return "";
+  if (endpoint.hostname && !WILDCARD_HOSTS.has(endpoint.hostname))
+    return endpoint.hostname.trim();
+  try {
+    return new URL(endpoint.url || "").hostname;
+  } catch {
+    return "";
+  }
+};
+
 export const deriveVectorUrl = (
   tunnel: PortalTunnelLike,
   endpoint?: PortalEndpointLike | null,
@@ -248,48 +542,45 @@ export const deriveVectorUrl = (
   const commandURL =
     portalUrlFromCommand(tunnel.commandURL) ||
     portalUrlFromCommand(tunnel.commandLine);
-  const fromUrl = valuesFromPortalUrl(portalUrlFromTunnel(tunnel));
-  const fromCommand = valuesFromPortalUrl(commandURL);
-  const sharedKey =
-    fromCommand.sharedKey ||
-    tunnel.sharedKey?.trim() ||
-    fromUrl.sharedKey ||
-    "";
-  const listenPort = String(
-    fromUrl.listenPort ?? tunnel.listenPort ?? "",
-  ).trim();
-  const listenHost = (fromUrl.listenHost ?? tunnel.listenHost ?? "").trim();
-  const publicHost = !WILDCARD_HOSTS.has(listenHost)
-    ? listenHost
-    : endpointHostname(
-        endpoint ??
-          (typeof tunnel.endpoint === "object" ? tunnel.endpoint : null),
-      );
+  const fromCommand = parsePortalUrl(commandURL);
+  const fromUrl = parsePortalUrl(portalUrlFromTunnel(tunnel));
+  const service = portalServiceEndpoint(tunnel);
+  const sharedKey = fromCommand?.parsed.username
+    ? decodeURIComponent(fromCommand.parsed.username)
+    : tunnel.sharedKey;
 
-  if (!sharedKey || !listenPort || !publicHost) return null;
+  if (!sharedKey) return null;
+  if (WILDCARD_HOSTS.has(service.host))
+    service.host = normalizeHost(endpointHostname(endpoint ?? tunnel.endpoint));
+  try {
+    validateServiceEndpoint(service, false);
+    validateSocksEndpoint(socks, true);
+  } catch {
+    return null;
+  }
+  let sourceQuery: Map<string, string>;
 
-  const network = (fromUrl.network ?? tunnel.network ?? "mix").toLowerCase();
-  const carrier = ["mix", "tcp", "udp"].includes(network) ? network : "mix";
-  const mux = carrier === "udp" ? 0 : 1;
-  const alpn = fromUrl.alpn ?? tunnel.alpn ?? "now/1";
-  const rate = fromUrl.rate ?? tunnel.rate ?? 0;
-  const etar = fromUrl.etar ?? tunnel.etar ?? 0;
-  const log =
-    fromCommand.logLevel ?? tunnel.logLevel ?? fromUrl.logLevel ?? "info";
-  const query = [
-    ["up", carrier],
-    ["down", carrier],
-    ["mux", mux],
-    ["sni", "none"],
-    ["pin", "none"],
-    ["alpn", alpn],
-    ["rate", rate],
-    ["etar", etar],
-    ["socks", socks],
-    ["log", log],
-  ]
-    .map(([key, value]) => `${key}=${encodeValue(value)}`)
-    .join("&");
+  try {
+    sourceQuery = fromUrl ? portalQuery(fromUrl.parsed) : new Map();
+  } catch {
+    return null;
+  }
+  const sourceValue = (key: "morph" | "rate" | "etar") =>
+    fromUrl ? (sourceQuery.get(key) ?? "0") : String(tunnel[key] ?? "0");
+  const carrier = service.tcpPort ? "tcp" : "udp";
+  const query = new URLSearchParams({
+    up: carrier,
+    down: carrier,
+    mux: "0",
+    sni: "none",
+    pin: "none",
+    morph: sourceValue("morph"),
+    rate: sourceValue("rate"),
+    etar: sourceValue("etar"),
+    socks,
+    log:
+      fromCommand?.parsed.searchParams.get("log") ?? tunnel.logLevel ?? "info",
+  });
 
-  return `nowhere://${encodeValue(sharedKey)}@${formatHost(publicHost)}:${listenPort}?${query}`;
+  return `vector://${encodeComponent(sharedKey)}@${formatServiceEndpoint(service)}?${encodeNativeQuery(query)}`;
 };

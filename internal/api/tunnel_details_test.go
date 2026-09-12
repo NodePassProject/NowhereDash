@@ -29,8 +29,8 @@ func TestTunnelDetailsUsesExpandedConfigURL(t *testing.T) {
 	if err := database.Create(&endpoint).Error; err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	commandURL := "portal://runtime@:2077?net=tcp"
-	configURL := "portal://:2077?net=tcp&tls=1&alpn=now%2F1&rate=0&etar=0&dial=auto&socks=none&next=none"
+	commandURL := "portal://runtime@*/tcp:2077"
+	configURL := "portal://*/tcp:2077?tls=1&morph=0&rate=0&etar=0&dial=auto&socks=none&next=none"
 	portal := models.Tunnel{
 		Name: "portal", EndpointID: endpoint.ID, Type: models.TunnelTypePortal,
 		Status: models.TunnelStatusRunning, ListenPort: "2077", CommandLine: commandURL,
@@ -77,8 +77,8 @@ func TestTunnelDetailsUsesExpandedConfigURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse Vector URL: %v", err)
 	}
-	if vectorURL.Scheme != "nowhere" || vectorURL.User == nil || vectorURL.User.Username() != "runtime" || vectorURL.Host != "portal.example:2077" ||
-		vectorURL.Query().Get("up") != "tcp" || vectorURL.Query().Get("down") != "tcp" || vectorURL.Query().Get("mux") != "1" {
+	if vectorURL.Scheme != "vector" || vectorURL.User == nil || vectorURL.User.Username() != "runtime" || vectorURL.Host != "portal.example" || vectorURL.Path != "/tcp:2077" ||
+		vectorURL.Query().Get("up") != "tcp" || vectorURL.Query().Get("down") != "tcp" || vectorURL.Query().Get("mux") != "0" {
 		t.Fatalf("Vector URL did not use expanded config: %s", response.VectorURL)
 	}
 }

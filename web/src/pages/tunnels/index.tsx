@@ -1,5 +1,6 @@
 import type { SortDescriptor } from "@heroui/react";
 import type { Selection } from "@react-types/shared";
+import type { PortalTunnel } from "@/lib/types/portal";
 
 import {
   Button,
@@ -41,7 +42,12 @@ import { useNavigate } from "react-router-dom";
 import GroupManagementDrawer from "@/components/tunnels/group-management-drawer";
 import PortalVectorQrModal from "@/components/tunnels/portal-vector-qr-modal";
 import SimpleCreateTunnelModal from "@/components/tunnels/simple-create-tunnel-modal";
-import { buildPortalUrl, deriveVectorUrl } from "@/lib/portal-url";
+import {
+  buildPortalUrl,
+  deriveVectorUrl,
+  portalListenerAddresses,
+  portalNetworkLabel,
+} from "@/lib/portal-url";
 import { buildApiUrl } from "@/lib/utils";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 
@@ -55,35 +61,6 @@ interface EndpointSummary {
 interface TunnelGroup {
   id: number;
   name: string;
-}
-
-interface PortalTunnel {
-  id: string | number;
-  instanceId?: string;
-  type: "portal";
-  name: string;
-  endpoint?: string | EndpointSummary;
-  endpointId: string | number;
-  endpointName?: string;
-  status: "running" | "stopped" | "error" | "offline";
-  listenHost: string;
-  listenPort: string | number;
-  sharedKey?: string;
-  network?: string;
-  tlsMode?: string;
-  commandLine?: string;
-  configLine?: string;
-  alpn?: string;
-  rate?: number;
-  etar?: number;
-  dial?: string;
-  logLevel?: string;
-  portalHost?: string;
-  vectorUrl?: string;
-  totalRx?: number;
-  totalTx?: number;
-  sorts?: number;
-  tags?: Record<string, string>;
 }
 
 type PortalAction = "start" | "stop" | "restart";
@@ -142,13 +119,6 @@ const statusColor = (status: PortalTunnel["status"]) => {
   if (status === "offline") return "warning" as const;
 
   return "danger" as const;
-};
-
-const formatListenAddress = (host: string, port: string | number) => {
-  if (!host || host === "0.0.0.0" || host === "::") return `:${port}`;
-  if (host.includes(":") && !host.startsWith("[")) return `[${host}]:${port}`;
-
-  return `${host}:${port}`;
 };
 
 export default function TunnelsPage() {
@@ -940,6 +910,7 @@ export default function TunnelsPage() {
           </Button>
           <ButtonGroup>
             <Button
+              aria-label={copy.create}
               color="primary"
               startContent={<Icon icon="lucide:plus" width={17} />}
               onPress={() => setCreateOpen(true)}
@@ -1338,11 +1309,12 @@ export default function TunnelsPage() {
                       </Tooltip>
                     </TableCell>
                     <TableCell>
-                      <div className="font-mono text-sm text-default-600">
-                        {formatListenAddress(
-                          tunnel.listenHost,
-                          tunnel.listenPort,
-                        )}
+                      <div className="max-w-64 font-mono text-xs text-default-600">
+                        {portalListenerAddresses(tunnel).map((address) => (
+                          <Tooltip key={address} content={address}>
+                            <div className="truncate">{address}</div>
+                          </Tooltip>
+                        ))}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -1357,7 +1329,8 @@ export default function TunnelsPage() {
                     </TableCell>
                     <TableCell>
                       <span className="font-mono text-sm text-default-600">
-                        {tunnel.network || "mix"}
+                        {portalNetworkLabel(tunnel)}
+                        {tunnel.morph === "1" ? " · Morph" : ""}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -1459,11 +1432,12 @@ export default function TunnelsPage() {
                       <dt className="text-xs text-default-400">
                         {copy.listen}
                       </dt>
-                      <dd className="mt-1 truncate font-mono">
-                        {formatListenAddress(
-                          tunnel.listenHost,
-                          tunnel.listenPort,
-                        )}
+                      <dd className="mt-1 font-mono text-xs">
+                        {portalListenerAddresses(tunnel).map((address) => (
+                          <Tooltip key={address} content={address}>
+                            <div className="truncate">{address}</div>
+                          </Tooltip>
+                        ))}
                       </dd>
                     </div>
                     <div className="min-w-0">
@@ -1481,7 +1455,8 @@ export default function TunnelsPage() {
                         {copy.network}
                       </dt>
                       <dd className="mt-1 truncate font-mono">
-                        {tunnel.network || "mix"}
+                        {portalNetworkLabel(tunnel)}
+                        {tunnel.morph === "1" ? " · Morph" : ""}
                       </dd>
                     </div>
                     <div className="min-w-0">

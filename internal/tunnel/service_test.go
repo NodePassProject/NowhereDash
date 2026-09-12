@@ -1,6 +1,12 @@
 package tunnel
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +17,80 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
+
+func TestCreateAndUpdateV2Portal(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&models.Endpoint{}, &models.Tunnel{}, &models.TunnelOperationLog{}, &models.EndpointTrafficCursor{}); err != nil {
+		t.Fatal(err)
+	}
+	var commands []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost || r.Method == http.MethodPut {
+			var body struct {
+				URL string `json:"url"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+			commands = append(commands, body.URL)
+		}
+		// OpenCtrl may return only lifecycle state while configuration arrives by SSE.
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "v2-portal", "status": "running"})
+	}))
+	defer upstream.Close()
+	endpoint := models.Endpoint{Name: "test", URL: upstream.URL, APIKey: "test-key"}
+	if err := database.Create(&endpoint).Error; err != nil {
+		t.Fatal(err)
+	}
+	cacheKey := fmt.Sprint(endpoint.ID)
+	nowhere.GetCache().Set(cacheKey, upstream.URL, endpoint.APIKey)
+	t.Cleanup(func() { nowhere.GetCache().Delete(cacheKey) })
+	tcp, udp, morph := "2006", "2017", "1"
+	req := PortalRequest{Name: "v2", EndpointID: endpoint.ID, ListenHost: "*", SharedKey: "secret", TCPPort: &tcp, UDPPort: &udp, TCPFamily: "4", UDPFamily: "6", Morph: &morph}
+	req.Next, req.Mux = "up%40key@origin.example/udp6:3017", "1"
+	service := NewService(database)
+	created, err := service.CreatePortal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ListenPort != tcp || created.Network == nil || *created.Network != "mix" {
+		t.Fatalf("missing derived fields: %+v", created)
+	}
+	serialized, err := json.Marshal(created)
+	if err != nil || created.EnableLogStore || !strings.Contains(string(serialized), `"enable_log_store":false`) {
+		t.Fatalf("disabled log storage did not round-trip to the form: %s, %v", serialized, err)
+	}
+	disabled, disabledMorph := "", "0"
+	req.TCPPort, req.Morph = &disabled, &disabledMorph
+	req.Next, req.Socks = "none", "user:p%40ss@proxy.example:1080"
+	updated, err := service.UpdatePortal(created.ID, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored models.Tunnel
+	if err := database.First(&stored, updated.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.TCPPort == nil || *stored.TCPPort != "" || stored.UDPPort == nil || *stored.UDPPort != udp || stored.Morph == nil || *stored.Morph != "0" || stored.ListenPort != udp || *stored.Network != "udp" {
+		t.Fatalf("disabled settings persisted incorrectly: %+v", stored)
+	}
+	if len(commands) != 2 {
+		t.Fatalf("commands = %d", len(commands))
+	}
+	first, _ := url.Parse(commands[0])
+	second, _ := url.Parse(commands[1])
+	if first.Path != "/tcp4:2006/udp6:2017" || first.Query().Get("morph") != "1" || second.Path != "/udp6:2017" || second.Query().Get("morph") != "0" {
+		t.Fatalf("incorrect remote commands: %v", commands)
+	}
+	if !strings.Contains(first.RawQuery, "next=up%40key@origin.example/udp6:3017") || first.Query().Get("up") != "udp" || first.Query().Get("mux") != "0" ||
+		!strings.Contains(second.RawQuery, "socks=user:p%40ss@proxy.example:1080") || value(stored.Next) != "none" || value(stored.Socks) != req.Socks {
+		t.Fatalf("form credentials or automatic next defaults changed: %v", commands)
+	}
+}
 
 func TestSubmittedMetadataOverridesStaleInstanceResponse(t *testing.T) {
 	staleTags := map[string]string{"region": "old"}
@@ -39,8 +119,8 @@ func TestSubmittedMetadataOverridesStaleInstanceResponse(t *testing.T) {
 func TestApplyInstanceStateUsesConfigURLAndPreservesMetadata(t *testing.T) {
 	tags := map[string]string{"region": "sg"}
 	peerSID := "peer-1"
-	commandURL := "portal://runtime@:2077?net=tcp"
-	configURL := "portal://:2077?net=tcp&tls=1&alpn=now%2F1&rate=0&etar=0&dial=auto&socks=none&next=none"
+	commandURL := "portal://runtime@*/tcp:2077"
+	configURL := "portal://*/tcp:2077?tls=1&morph=0&rate=0&etar=0&dial=auto&socks=none&next=none"
 	tunnel := models.Tunnel{
 		CommandLine: commandURL,
 		Tags:        &tags,
@@ -107,12 +187,14 @@ func TestPersistCreatedPortalReconcilesSSEInsert(t *testing.T) {
 	newSID := "api-peer"
 	restartTrue := true
 	rate, etar, mux := int64(100), int64(200), "1"
+	tcpPort, udpPort, morph := "20001", "20002", "1"
 	incoming := models.Tunnel{
 		Name: "API Portal", EndpointID: endpoint.ID, InstanceID: &instanceID,
 		Type: models.TunnelTypePortal, Status: models.TunnelStatusStopped,
 		ListenHost: "::", ListenPort: "20001", TLSMode: models.TLS1,
 		CommandLine: "portal://api-key@[::]:20001", SharedKey: &newKey, Network: &newNetwork,
 		ALPN: &alpn, Rate: &rate, Etar: &etar, Mux: &mux,
+		TCPPort: &tcpPort, UDPPort: &udpPort, TCPFamily: "6", UDPFamily: "6", Morph: &morph,
 		Restart: &restartTrue, Tags: &newTags, Peer: &models.Peer{SID: &newSID, Type: &peerType},
 		EnableLogStore: true, Sorts: 42,
 		TCPRx: 901, TCPTx: 902, UDPRx: 903, UDPTx: 904,
@@ -150,6 +232,9 @@ func TestPersistCreatedPortalReconcilesSSEInsert(t *testing.T) {
 	if stored.Tags == nil || (*stored.Tags)["region"] != "sg" || stored.Peer == nil ||
 		stored.Peer.SID == nil || *stored.Peer.SID != newSID {
 		t.Fatalf("API metadata was not applied: tags=%#v peer=%#v", stored.Tags, stored.Peer)
+	}
+	if stored.TCPPort == nil || *stored.TCPPort != tcpPort || stored.UDPPort == nil || *stored.UDPPort != udpPort || stored.TCPFamily != "6" || stored.UDPFamily != "6" || stored.Morph == nil || *stored.Morph != morph {
+		t.Fatalf("v2 endpoint was not persisted: %+v", stored)
 	}
 	if stored.Status != sseRow.Status || stored.TCPRx != sseRow.TCPRx || stored.TCPTx != sseRow.TCPTx ||
 		stored.UDPRx != sseRow.UDPRx || stored.UDPTx != sseRow.UDPTx ||

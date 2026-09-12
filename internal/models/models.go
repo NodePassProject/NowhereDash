@@ -67,6 +67,11 @@ type Tunnel struct {
 	Status      TunnelStatus `json:"status" gorm:"type:text;default:'stopped';index;column:status"`
 	ListenHost  string       `json:"listenHost" gorm:"type:text;not null;column:listen_host"`
 	ListenPort  string       `json:"listenPort" gorm:"type:text;not null;column:listen_port"`
+	TCPPort     *string      `json:"tcpPort,omitempty" gorm:"type:text;column:tcp_port"`
+	UDPPort     *string      `json:"udpPort,omitempty" gorm:"type:text;column:udp_port"`
+	TCPFamily   string       `json:"tcpFamily" gorm:"type:text;column:tcp_family"`
+	UDPFamily   string       `json:"udpFamily" gorm:"type:text;column:udp_family"`
+	Morph       *string      `json:"morph,omitempty" gorm:"type:text;column:morph"`
 	TLSMode     TLSMode      `json:"tlsMode" gorm:"type:text;column:tls_mode"`
 	CertPath    *string      `json:"certPath,omitempty" gorm:"type:text;column:cert_path"`
 	KeyPath     *string      `json:"keyPath,omitempty" gorm:"type:text;column:key_path"`
@@ -77,7 +82,7 @@ type Tunnel struct {
 	Restart     *bool        `json:"restart" gorm:"type:bool;column:restart"`
 	Rate        *int64       `json:"rate,omitempty" gorm:"type:int;column:rate"`
 
-	EnableLogStore bool `json:"enable_log_store,omitempty" gorm:"default:true;type:bool;column:enable_log_store"`
+	EnableLogStore bool `json:"enable_log_store" gorm:"default:true;type:bool;column:enable_log_store"`
 
 	// 网络流量统计
 	TCPRx int64 `json:"tcpRx" gorm:"default:0;column:tcp_rx"`

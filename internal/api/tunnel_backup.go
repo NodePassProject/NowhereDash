@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	BackupVersion       = 3
+	BackupVersion       = 4
 	LegacyBackupVersion = 2
 )
 
@@ -22,6 +22,11 @@ type BackupInstance struct {
 	Type       string             `json:"type"`
 	ListenHost string             `json:"listenHost"`
 	ListenPort string             `json:"listenPort"`
+	TCPPort    *string            `json:"tcpPort,omitempty"`
+	UDPPort    *string            `json:"udpPort,omitempty"`
+	TCPFamily  string             `json:"tcpFamily,omitempty"`
+	UDPFamily  string             `json:"udpFamily,omitempty"`
+	Morph      *string            `json:"morph,omitempty"`
 	SharedKey  *string            `json:"sharedKey"`
 	Network    *string            `json:"network"`
 	TLSMode    string             `json:"tlsMode"`
@@ -79,6 +84,8 @@ func tunnelToBackupInstance(item models.Tunnel) BackupInstance {
 	return BackupInstance{
 		Name: item.Name, Type: string(models.TunnelTypePortal), ListenHost: item.ListenHost,
 		ListenPort: item.ListenPort, SharedKey: item.SharedKey, Network: item.Network,
+		TCPPort: item.TCPPort, UDPPort: item.UDPPort,
+		TCPFamily: item.TCPFamily, UDPFamily: item.UDPFamily, Morph: item.Morph,
 		TLSMode: string(item.TLSMode), CertPath: item.CertPath, KeyPath: item.KeyPath,
 		ALPN: item.ALPN, Rate: item.Rate, Etar: item.Etar, Dial: item.Dial, Socks: item.Socks,
 		Next: item.Next, Up: item.Up, Down: item.Down, Mux: item.Mux, Sni: item.Sni,
@@ -107,6 +114,8 @@ func (item BackupInstance) portalRequest(endpointID int64) tunnel.PortalRequest 
 	}
 	return tunnel.PortalRequest{
 		Name: item.Name, EndpointID: endpointID, ListenHost: item.ListenHost, ListenPort: item.ListenPort,
+		TCPPort: item.TCPPort, UDPPort: item.UDPPort,
+		TCPFamily: item.TCPFamily, UDPFamily: item.UDPFamily, Morph: item.Morph,
 		SharedKey: backupValue(item.SharedKey), Network: backupValue(item.Network), TLSMode: models.TLSMode(item.TLSMode),
 		CertPath: backupValue(item.CertPath), KeyPath: backupValue(item.KeyPath), ALPN: backupValue(item.ALPN),
 		Rate: item.Rate, Etar: item.Etar, Dial: backupValue(item.Dial), Socks: backupValue(item.Socks),
@@ -157,8 +166,8 @@ func (h *TunnelHandler) HandleImportInstances(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 		return
 	}
-	if input.Version != LegacyBackupVersion && input.Version != BackupVersion {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Only NowhereDash backup versions 2 and 3 are supported"})
+	if input.Version < LegacyBackupVersion || input.Version > BackupVersion {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Only NowhereDash backup versions 2, 3 and 4 are supported"})
 		return
 	}
 	var endpointCount int64

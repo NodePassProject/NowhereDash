@@ -1016,13 +1016,30 @@ func renderPortal(tunnel *models.Tunnel, preferences Preferences) []string {
 	if len(hosts) == 0 {
 		return nil
 	}
-	port, err := strconv.Atoi(tunnel.ListenPort)
-	if err != nil || port < 1 || port > 65535 {
+	listener := nowhere.EndpointFromTunnel(*tunnel)
+	if err := listener.Validate(true); err != nil {
 		return nil
 	}
-	combos := carrierCombos(valueOr(tunnel.Network, "mix"), preferences)
-	lines := make([]string, 0, len(hosts)*len(combos))
+	lines := make([]string, 0, len(hosts)*4)
 	for _, host := range hosts {
+		endpoint := listener
+		endpoint.Host = host
+		if ip := net.ParseIP(host); ip != nil {
+			family := "6"
+			if ip.To4() != nil {
+				family = "4"
+			}
+			if endpoint.TCPFamily != "any" && endpoint.TCPFamily != family {
+				endpoint.TCPPort = ""
+			}
+			if endpoint.UDPFamily != "any" && endpoint.UDPFamily != family {
+				endpoint.UDPPort = ""
+			}
+		}
+		if err := endpoint.Validate(false); err != nil {
+			continue
+		}
+		combos := carrierCombos(endpoint.Network(), preferences)
 		for _, combo := range combos {
 			name := tunnel.Name
 			if isIPv6Host(host) {
@@ -1035,11 +1052,9 @@ func renderPortal(tunnel *models.Tunnel, preferences Preferences) []string {
 			if combo.up == "tcp" || combo.down == "tcp" {
 				query += "&mux=1"
 			}
-			if tunnel.ALPN != nil && *tunnel.ALPN != "" {
-				query += "&alpn=" + percentEncode(*tunnel.ALPN)
-			}
+			query += "&morph=" + valueOr(tunnel.Morph, "0")
 			line := "nowhere://" + percentEncode(*tunnel.SharedKey) + "@" +
-				net.JoinHostPort(host, tunnel.ListenPort) + "?" + query + "#" + percentEncode(name)
+				endpoint.Canonical() + "?" + query + "#" + percentEncode(name)
 			lines = append(lines, line)
 		}
 	}

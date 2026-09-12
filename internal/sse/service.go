@@ -235,31 +235,17 @@ func (s *Service) handleInitialEvent(payload SSEResp) {
 		return
 	}
 
-	// 检查隧道是否已存在（用 Find+Limit 避免 GORM 把 not-found 打成 ERROR）
-	var existing []models.Tunnel
-	if err := s.db.Where("endpoint_id = ? AND instance_id = ? AND type = ?", payload.EndpointID, payload.Instance.ID, models.TunnelTypePortal).Limit(1).Find(&existing).Error; err != nil {
-		log.Errorf("[Master-%d]查询隧道 %s 失败: %v", payload.EndpointID, payload.Instance.ID, err)
-		return
-	}
-	if len(existing) > 0 {
-		// 隧道已存在（正常情况），更新运行时信息
-		log.Debugf("[Master-%d]隧道 %s 已存在，更新运行时信息", payload.EndpointID, payload.Instance.ID)
-		s.updateTunnelRuntimeInfo(payload)
-		return
-	}
-	// 创建最小化隧道记录，包含从EndpointSSE获取的流量等信息
-	tunnel := buildTunnel(payload)
-	if err := s.db.Create(&tunnel).Error; err != nil {
-		log.Errorf("[Master-%d]初始化隧道 %s 失败: %v", payload.EndpointID, payload.Instance.ID, err)
-	} else {
-		log.Infof("[Master-%d]最小化隧道记录 %s 初始化成功，包含流量信息", payload.EndpointID, payload.Instance.ID)
-		s.updateEndpointTunnelCount(payload.EndpointID)
-
-	}
+	s.handleCreateEvent(payload)
 }
 
 func buildTunnel(payload SSEResp) *models.Tunnel {
-	tunnel := nowhere.ParseInstanceTunnel(payload.Instance)
+	tunnel := &models.Tunnel{Type: models.TunnelTypePortal, Name: payload.Instance.ID, EnableLogStore: true}
+	applyTunnelEvent(tunnel, payload)
+	return tunnel
+}
+
+func applyTunnelEvent(tunnel *models.Tunnel, payload SSEResp) {
+	nowhere.ApplyInstanceConfig(tunnel, payload.Instance)
 	// 补充从EndpointSSE获取的信息
 	tunnel.EndpointID = payload.EndpointID
 	tunnel.InstanceID = &payload.Instance.ID
@@ -272,20 +258,22 @@ func buildTunnel(payload SSEResp) *models.Tunnel {
 	tunnel.Pool = payload.Instance.Pool
 	tunnel.Ping = payload.Instance.Ping
 	tunnel.LastEventTime = models.NullTime{Time: payload.TimeStamp, Valid: true}
-	tunnel.EnableLogStore = true
-	tunnel.Restart = payload.Instance.Restart
-	if payload.Instance.Alias != nil && *payload.Instance.Alias != "" {
-		tunnel.Name = *payload.Instance.Alias
-	} else {
-		tunnel.Name = payload.Instance.ID
+	if payload.Instance.Restart != nil {
+		tunnel.Restart = payload.Instance.Restart
 	}
-	tunnel.Status = models.TunnelStatus(payload.Instance.Status)
+	if payload.Instance.Alias != nil {
+		tunnel.Name = payload.Instance.ID
+		if *payload.Instance.Alias != "" {
+			tunnel.Name = *payload.Instance.Alias
+		}
+	}
+	if payload.Instance.Status != "" {
+		tunnel.Status = models.TunnelStatus(payload.Instance.Status)
+	}
 	if payload.Instance.Meta != nil {
 		tunnel.Tags = payload.Instance.Meta.Tags
 		tunnel.Peer = payload.Instance.Meta.Peer
 	}
-
-	return tunnel
 }
 
 func (s *Service) handleCreateEvent(payload SSEResp) {
@@ -309,14 +297,7 @@ func (s *Service) handleCreateEvent(payload SSEResp) {
 		log.Errorf("[Master-%d]创建隧道记录 %s 失败: %v", payload.EndpointID, payload.Instance.ID, err)
 		return
 	}
-	result := s.db.Model(&models.Tunnel{}).
-		Where("endpoint_id = ? AND instance_id = ? AND type = ?", payload.EndpointID, payload.Instance.ID, models.TunnelTypePortal).
-		Where("last_event_time IS NULL OR last_event_time <= ?", payload.TimeStamp).
-		Updates(nowhere.TunnelToMap(tunnel))
-	if result.Error != nil {
-		log.Errorf("[Master-%d]更新隧道记录 %s 失败: %v", payload.EndpointID, payload.Instance.ID, result.Error)
-		return
-	}
+	s.updateTunnelRuntimeInfo(payload)
 	log.Infof("[Master-%d]隧道记录 %s 处理成功（创建或更新）", payload.EndpointID, payload.Instance.ID)
 	s.updateEndpointTunnelCount(payload.EndpointID)
 }
@@ -335,7 +316,7 @@ func (s *Service) handleUpdateEvent(payload SSEResp) {
 		return
 	}
 	if len(checkRows) == 0 {
-		log.Warnf("[Master-%d]收到更新事件但隧道 %s 不存在，可能是时序问题，跳过处理", payload.EndpointID, payload.Instance.ID)
+		s.handleCreateEvent(payload)
 		return
 	}
 
@@ -358,6 +339,9 @@ func (s *Service) handleDeleteEvent(payload SSEResp) {
 		return
 	}
 	tunnel := delRows[0]
+	if tunnel.LastEventTime.Valid && tunnel.LastEventTime.Time.After(payload.TimeStamp) {
+		return
+	}
 	if err := subscription.NewService(s.db).AccountTunnels([]int64{tunnel.ID}); err != nil {
 		log.Errorf("[Master-%d]结算隧道 %s 订阅流量失败: %v", payload.EndpointID, payload.Instance.ID, err)
 		return
@@ -439,14 +423,20 @@ func (s *Service) handleShutdownEvent(payload SSEResp) {
 	}
 
 	// 通知Manager状态变化
-	s.manager.NotifyEndpointStatusChanged(payload.EndpointID, string(models.EndpointStatusOffline))
+	if s.manager != nil {
+		s.manager.NotifyEndpointStatusChanged(payload.EndpointID, string(models.EndpointStatusOffline))
+	}
 }
 
 // updateTunnelRuntimeInfo 更新隧道运行时信息（流量、状态、ping等）
 func (s *Service) updateTunnelRuntimeInfo(payload SSEResp) {
-	// 准备更新字段
-	tunnel := buildTunnel(payload)
-	updates := nowhere.TunnelToMap(tunnel)
+	var existing []models.Tunnel
+	if err := s.db.Where("endpoint_id = ? AND instance_id = ? AND type = ?", payload.EndpointID, payload.Instance.ID, models.TunnelTypePortal).Limit(1).Find(&existing).Error; err != nil || len(existing) == 0 {
+		return
+	}
+	tunnel := existing[0]
+	applyTunnelEvent(&tunnel, payload)
+	updates := nowhere.TunnelToMap(&tunnel)
 	// 更新 tunnel 表
 	result := s.db.Model(&models.Tunnel{}).
 		Where("endpoint_id = ? AND instance_id = ? AND type = ?", payload.EndpointID, payload.Instance.ID, models.TunnelTypePortal).

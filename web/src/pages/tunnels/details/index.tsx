@@ -1,3 +1,5 @@
+import type { PortalTunnel } from "@/lib/types/portal";
+
 import {
   Button,
   Card,
@@ -49,7 +51,13 @@ import { SpeedChart } from "@/components/ui/speed-chart";
 import TunnelStatsCharts from "@/components/ui/tunnel-stats-charts";
 import { useMetricsTrend } from "@/lib/hooks/use-metrics-trend";
 import { useTunnelSSE } from "@/lib/hooks/use-sse";
-import { buildPortalUrl, deriveVectorUrl } from "@/lib/portal-url";
+import {
+  buildPortalUrl,
+  deriveVectorUrl,
+  formatServiceEndpoint,
+  portalServiceEndpoint,
+  portalNetworkLabel,
+} from "@/lib/portal-url";
 import { buildApiUrl, maskAddress } from "@/lib/utils";
 
 interface EndpointInfo {
@@ -57,50 +65,6 @@ interface EndpointInfo {
   name: string;
   hostname?: string;
   url?: string;
-}
-
-interface PeerMetadata {
-  sid?: string | null;
-  type?: string | null;
-  alias?: string | null;
-}
-
-interface PortalTunnel {
-  id: string | number;
-  instanceId?: string;
-  type: "portal";
-  name: string;
-  endpointId: string | number;
-  status: "running" | "stopped" | "error" | "offline";
-  listenHost: string;
-  listenPort: string | number;
-  sharedKey?: string;
-  tlsMode?: string;
-  certPath?: string;
-  keyPath?: string;
-  logLevel?: string;
-  commandLine?: string | null;
-  configLine?: string | null;
-  restart?: boolean;
-  network?: string;
-  alpn?: string;
-  rate?: number;
-  etar?: number;
-  dial?: string;
-  socks?: string;
-  sni?: string;
-  tags?: Record<string, string> | null;
-  peer?: PeerMetadata | null;
-  tcpRx?: number;
-  tcpTx?: number;
-  udpRx?: number;
-  udpTx?: number;
-  tcps?: number | null;
-  udps?: number | null;
-  pool?: number | null;
-  ping?: number | null;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 interface DetailResponse {
@@ -798,7 +762,7 @@ export default function TunnelDetailPage() {
     showConfigLine && configURL ? configURL : portalUrl;
   const vectorUrl = detail.vectorUrl || deriveVectorUrl(tunnel, endpoint);
   const tagEntries = Object.entries(tunnel.tags ?? {});
-  const listenAddress = `${tunnel.listenHost || "0.0.0.0"}:${tunnel.listenPort}`;
+  const listenAddress = formatServiceEndpoint(portalServiceEndpoint(tunnel));
   const displayedListenAddress = maskAddress(
     listenAddress,
     settings.isPrivacyMode,
@@ -1035,7 +999,7 @@ export default function TunnelDetailPage() {
                   label={copy.transport}
                   value={
                     <Chip color="primary" size="sm" variant="flat">
-                      {valueOrDefault(tunnel.network, "mix")}
+                      {portalNetworkLabel(tunnel)}
                     </Chip>
                   }
                 />
@@ -1101,8 +1065,21 @@ export default function TunnelDetailPage() {
                   label="ALPN"
                   value={
                     <span className="block truncate font-mono text-sm">
-                      {valueOrDefault(tunnel.alpn, "now/1")}
+                      nw2
                     </span>
+                  }
+                />
+                <CellValue
+                  icon={<InfoIcon icon="lucide:shield" />}
+                  label="Morph"
+                  value={
+                    tunnel.morph === "1"
+                      ? zh
+                        ? "启用"
+                        : "On"
+                      : zh
+                        ? "关闭"
+                        : "Off"
                   }
                 />
                 <CellValue
@@ -1125,7 +1102,7 @@ export default function TunnelDetailPage() {
                 />
                 <CellValue
                   icon={<InfoIcon icon="lucide:shield" />}
-                  label="SNI"
+                  label="Next SNI"
                   value={
                     <span className="block truncate font-mono text-sm">
                       {valueOrDefault(tunnel.sni)}
@@ -1141,6 +1118,50 @@ export default function TunnelDetailPage() {
                     </span>
                   }
                 />
+                <CellValue
+                  icon={<InfoIcon icon="lucide:route" />}
+                  label={zh ? "下级隧道" : "Next Portal"}
+                  value={
+                    <span className="block break-all font-mono text-sm">
+                      {maskAddress(
+                        tunnel.next?.slice(tunnel.next.lastIndexOf("@") + 1) ||
+                          "none",
+                        settings.isPrivacyMode,
+                      )}
+                    </span>
+                  }
+                />
+                {tunnel.next && tunnel.next !== "none" && (
+                  <>
+                    <CellValue
+                      icon={<InfoIcon icon="lucide:network" />}
+                      label={zh ? "下级上行 / 下行" : "Next up / down"}
+                      value={`${tunnel.up || "tcp"} / ${tunnel.down || "tcp"}`}
+                    />
+                    <CellValue
+                      icon={<InfoIcon icon="lucide:network" />}
+                      label="Next TLS Mux"
+                      value={
+                        tunnel.mux === "1"
+                          ? zh
+                            ? "启用"
+                            : "On"
+                          : zh
+                            ? "关闭"
+                            : "Off"
+                      }
+                    />
+                    <CellValue
+                      icon={<InfoIcon icon="lucide:shield" />}
+                      label="Next SHA-256"
+                      value={
+                        <span className="break-all font-mono text-xs">
+                          {tunnel.pin || "none"}
+                        </span>
+                      }
+                    />
+                  </>
+                )}
                 <CellValue
                   icon={<InfoIcon icon="lucide:rotate-ccw" />}
                   label={copy.autoRestart}
@@ -1357,6 +1378,7 @@ export default function TunnelDetailPage() {
                   {copy.realtime}
                 </span>
                 <Switch
+                  aria-label={copy.realtimeOutput}
                   color="primary"
                   isSelected={isRealtimeLogging}
                   size="sm"
@@ -1370,6 +1392,7 @@ export default function TunnelDetailPage() {
                   {copy.realtimeOutput}
                 </span>
                 <Switch
+                  aria-label={copy.realtimeOutput}
                   color="primary"
                   isSelected={isRealtimeLogging}
                   size="sm"

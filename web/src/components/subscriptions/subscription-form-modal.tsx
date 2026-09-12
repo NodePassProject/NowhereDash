@@ -47,6 +47,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import { formatServiceEndpoint, portalServiceEndpoint } from "@/lib/portal-url";
 import SubscriptionIconPicker from "@/components/subscriptions/subscription-icon-picker";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import {
@@ -251,12 +252,6 @@ const replaceNodeName = (uri: string, name: string) => {
   return `${base}#${encodeURIComponent(name.trim())}`;
 };
 
-const formatHost = (host: string) => {
-  const value = host.trim().replace(/^\[|\]$/g, "");
-
-  return value.includes(":") ? `[${value}]` : value;
-};
-
 const portalUrlPreview = (
   portal: PortalOption,
   name: string,
@@ -264,7 +259,22 @@ const portalUrlPreview = (
 ) => {
   const host = portal.portalHost || portal.listenHost || "*";
   const credential = portal.sharedKey?.trim() || "...";
-  const network = portal.network?.toLowerCase();
+  const endpoint = portalServiceEndpoint(portal);
+
+  endpoint.host = host.replace(/^\[|\]$/g, "");
+  const family = endpoint.host.includes(":")
+    ? "6"
+    : /^\d+\.\d+\.\d+\.\d+$/.test(endpoint.host)
+      ? "4"
+      : null;
+
+  if (family) {
+    if (endpoint.tcpFamily !== "any" && endpoint.tcpFamily !== family)
+      endpoint.tcpPort = "";
+    if (endpoint.udpFamily !== "any" && endpoint.udpFamily !== family)
+      endpoint.udpPort = "";
+  }
+  const network = !endpoint.tcpPort ? "udp" : !endpoint.udpPort ? "tcp" : "mix";
   const preferences = subscription?.preferences;
   const up =
     network === "tcp" || network === "udp"
@@ -277,9 +287,9 @@ const portalUrlPreview = (
   const query = new URLSearchParams({ up, down });
 
   if (up === "tcp" || down === "tcp") query.set("mux", "1");
-  if (portal.alpn) query.set("alpn", portal.alpn);
+  query.set("morph", portal.morph || "0");
 
-  return `nowhere://${encodeURIComponent(credential)}@${formatHost(host)}:${portal.listenPort}?${query.toString()}#${encodeURIComponent(name)}`;
+  return `nowhere://${encodeURIComponent(credential)}@${formatServiceEndpoint(endpoint)}?${query.toString()}#${encodeURIComponent(name)}`;
 };
 
 function FieldLabel({ label, required = false }: FieldLabelProps) {

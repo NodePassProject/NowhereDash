@@ -206,6 +206,21 @@ func TestOverLimitSubscriptionStopsAllRunningPortals(t *testing.T) {
 	}
 }
 
+func TestRenderV2PortalPreservesEndpointAndMorph(t *testing.T) {
+	portal := nowhere.ParseTunnelURL("portal://secret@*/tcp4:2006/udp6:2017?morph=1")
+	portal.Name = "v2"
+	portal.Endpoint = models.Endpoint{Hostname: "entry.example"}
+	lines := renderPortal(portal, Preferences{UpCarrier: "tcp", DownCarrier: "udp"})
+	if len(lines) != 1 || !strings.Contains(lines[0], "entry.example/tcp4:2006/udp6:2017?") || !strings.Contains(lines[0], "morph=1") || strings.Contains(lines[0], "alpn=") {
+		t.Fatalf("v2 settings lost: %v", lines)
+	}
+	portal.Endpoint.Hostname = "192.0.2.1"
+	lines = renderPortal(portal, Preferences{ExpandCarrierCombos: true})
+	if len(lines) != 1 || !strings.Contains(lines[0], "192.0.2.1/tcp4:2006?") || !strings.Contains(lines[0], "down=tcp") {
+		t.Fatalf("incompatible IP family advertised: %v", lines)
+	}
+}
+
 func TestRenderPublicProducesNowhereLinesAndPhysicalPortalCount(t *testing.T) {
 	db := openSubscriptionTestDB(t, nil)
 	portal := seedPortal(t, db, "[2001:db8::10]", models.TunnelStatusRunning, "mix", 0)
@@ -237,7 +252,7 @@ func TestRenderPublicProducesNowhereLinesAndPhysicalPortalCount(t *testing.T) {
 	for _, expected := range []string{
 		"nowhere://key%3A%2F%40@api.example:20001",
 		"nowhere://key%3A%2F%40@[2001:db8::10]:20001",
-		"alpn=now%2F1%20test",
+		"morph=0",
 		"#SG%20node%2001",
 		"%7C%20v6",
 	} {

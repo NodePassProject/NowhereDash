@@ -67,12 +67,14 @@ func stringPointer(value string) *string {
 
 func portalFromRequest(req PortalRequest) models.Tunnel {
 	return models.Tunnel{
-		Name:           strings.TrimSpace(req.Name),
-		EndpointID:     req.EndpointID,
-		Type:           models.TunnelTypePortal,
-		Status:         models.TunnelStatusStopped,
-		ListenHost:     strings.TrimSpace(req.ListenHost),
-		ListenPort:     strings.TrimSpace(req.ListenPort),
+		Name:       strings.TrimSpace(req.Name),
+		EndpointID: req.EndpointID,
+		Type:       models.TunnelTypePortal,
+		Status:     models.TunnelStatusStopped,
+		ListenHost: strings.TrimSpace(req.ListenHost),
+		ListenPort: strings.TrimSpace(req.ListenPort),
+		TCPPort:    req.TCPPort, UDPPort: req.UDPPort,
+		TCPFamily: req.TCPFamily, UDPFamily: req.UDPFamily, Morph: req.Morph,
 		SharedKey:      stringPointer(req.SharedKey),
 		Network:        stringPointer(req.Network),
 		TLSMode:        models.TLSMode(req.TLSMode),
@@ -138,6 +140,7 @@ var createdPortalAssignmentColumns = []string{
 	"type",
 	"listen_host",
 	"listen_port",
+	"tcp_port", "udp_port", "tcp_family", "udp_family", "morph",
 	"tls_mode",
 	"cert_path",
 	"key_path",
@@ -173,6 +176,7 @@ func (s *Service) persistCreatedPortal(tunnel *models.Tunnel) error {
 	}
 
 	instanceID := *tunnel.InstanceID
+	enableLogStore := tunnel.EnableLogStore
 	var canonical models.Tunnel
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.OnConflict{
@@ -183,6 +187,13 @@ func (s *Service) persistCreatedPortal(tunnel *models.Tunnel) error {
 			DoUpdates: clause.AssignmentColumns(createdPortalAssignmentColumns),
 		}).Create(tunnel).Error; err != nil {
 			return fmt.Errorf("upsert created tunnel: %w", err)
+		}
+		// GORM substitutes default:true for a false bool during Create.
+		if !enableLogStore {
+			if err := tx.Model(&models.Tunnel{}).Where("endpoint_id = ? AND instance_id = ?", tunnel.EndpointID, instanceID).
+				Update("enable_log_store", false).Error; err != nil {
+				return err
+			}
 		}
 
 		if err := tx.Where("endpoint_id = ? AND instance_id = ?", tunnel.EndpointID, instanceID).
@@ -205,6 +216,7 @@ func (s *Service) CreatePortal(req PortalRequest) (*models.Tunnel, error) {
 		return nil, err
 	}
 	commandLine := nowhere.BuildTunnelURLs(tunnel)
+	nowhere.ApplyInstanceConfig(&tunnel, nowhere.InstanceResult{URL: commandLine})
 	created, err := nowhere.CreateInstance(req.EndpointID, commandLine)
 	if err != nil {
 		return nil, err
@@ -243,7 +255,10 @@ func (s *Service) CreatePortal(req PortalRequest) (*models.Tunnel, error) {
 }
 
 func (s *Service) CreatePortalURL(endpointID int64, rawURL, name string) (*models.Tunnel, error) {
-	parsed := nowhere.ParseTunnelURL(strings.TrimSpace(rawURL))
+	parsed, err := nowhere.ParsePortalURL(strings.TrimSpace(rawURL))
+	if err != nil {
+		return nil, err
+	}
 	parsed.EndpointID = endpointID
 	parsed.Name = strings.TrimSpace(name)
 	if err := nowhere.ValidatePortalTunnel(*parsed); err != nil {
@@ -252,6 +267,8 @@ func (s *Service) CreatePortalURL(endpointID int64, rawURL, name string) (*model
 	request := PortalRequest{
 		Name: parsed.Name, EndpointID: endpointID, ListenHost: parsed.ListenHost,
 		ListenPort: parsed.ListenPort, SharedKey: value(parsed.SharedKey), Network: value(parsed.Network),
+		TCPPort: parsed.TCPPort, UDPPort: parsed.UDPPort,
+		TCPFamily: parsed.TCPFamily, UDPFamily: parsed.UDPFamily, Morph: parsed.Morph,
 		TLSMode: parsed.TLSMode, CertPath: value(parsed.CertPath), KeyPath: value(parsed.KeyPath),
 		ALPN: value(parsed.ALPN), Rate: parsed.Rate, Etar: parsed.Etar, Dial: value(parsed.Dial),
 		Socks: value(parsed.Socks), Next: value(parsed.Next), Up: value(parsed.Up), Down: value(parsed.Down),
@@ -294,6 +311,7 @@ func (s *Service) UpdatePortal(id int64, req PortalRequest) (*models.Tunnel, err
 		return nil, err
 	}
 	commandLine := nowhere.BuildTunnelURLs(updated)
+	nowhere.ApplyInstanceConfig(&updated, nowhere.InstanceResult{URL: commandLine})
 	if err := endpointtraffic.SyncEndpoint(s.db, existing.EndpointID, time.Now()); err != nil {
 		return nil, err
 	}
@@ -352,7 +370,7 @@ func (s *Service) GetTunnelsWithPagination(params TunnelQueryParams) (*TunnelLis
 	query := s.db.Model(&models.Tunnel{}).Where("tunnels.type = ?", models.TunnelTypePortal)
 	if params.Search != "" {
 		like := "%" + params.Search + "%"
-		query = query.Where("tunnels.name LIKE ? OR tunnels.listen_host LIKE ? OR tunnels.listen_port LIKE ?", like, like, like)
+		query = query.Where("tunnels.name LIKE ? OR tunnels.listen_host LIKE ? OR tunnels.listen_port LIKE ? OR tunnels.tcp_port LIKE ? OR tunnels.udp_port LIKE ?", like, like, like, like, like)
 	}
 	if params.Status != "" && params.Status != "all" {
 		query = query.Where("tunnels.status = ?", params.Status)
@@ -361,7 +379,7 @@ func (s *Service) GetTunnelsWithPagination(params TunnelQueryParams) (*TunnelLis
 		query = query.Where("tunnels.endpoint_id = ?", params.EndpointID)
 	}
 	if params.PortFilter != "" {
-		query = query.Where("tunnels.listen_port = ?", params.PortFilter)
+		query = query.Where("tunnels.listen_port = ? OR tunnels.tcp_port = ? OR tunnels.udp_port = ?", params.PortFilter, params.PortFilter, params.PortFilter)
 	}
 	if params.GroupID != "" && params.GroupID != "all" {
 		query = query.Joins("JOIN tunnel_groups ON tunnel_groups.tunnel_id = tunnels.id").Where("tunnel_groups.group_id = ?", params.GroupID)

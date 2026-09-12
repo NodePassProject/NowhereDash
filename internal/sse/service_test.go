@@ -138,8 +138,8 @@ func TestPortalUpdateUsesExpandedConfigURL(t *testing.T) {
 	database := openSSETestDB(t)
 	instanceID := "portal-1"
 	tags := map[string]string{"region": "sg"}
-	commandURL := "portal://runtime@:2077?net=tcp"
-	configURL := "portal://:2077?net=tcp&tls=1&alpn=now%2F1&rate=0&etar=0&dial=auto&socks=none&next=none"
+	commandURL := "portal://runtime@*/tcp:2077"
+	configURL := "portal://*/tcp:2077?tls=1&morph=0&rate=0&etar=0&dial=auto&socks=none&next=none"
 	tunnel := models.Tunnel{
 		Name: "portal", EndpointID: 1, InstanceID: &instanceID,
 		Type: models.TunnelTypePortal, Status: models.TunnelStatusRunning,
@@ -293,5 +293,40 @@ func TestEndpointTunnelCountIncludesOnlyPortals(t *testing.T) {
 	}
 	if endpoint.TunnelCount != 1 {
 		t.Fatalf("tunnel count = %d, want 1", endpoint.TunnelCount)
+	}
+}
+
+func TestV2PortalEventsPreserveMissingConfigAndClearDisabledOptions(t *testing.T) {
+	for _, eventType := range []string{"initial", "create", "update"} {
+		t.Run(eventType, func(t *testing.T) {
+			database := openSSETestDB(t)
+			service := testSSEService(database)
+			command := "portal://secret@*/tcp4:2006/udp6:2017?morph=1&next=up%40key@origin.example/udp6:3017"
+			initial := portalEvent("initial", 1, "v2-portal", command)
+			alias, restart := "saved name", true
+			initial.Instance.Alias, initial.Instance.Restart = &alias, &restart
+			service.ProcessEvent(initial)
+			partial := portalEvent(eventType, 1, "v2-portal", "")
+			partial.TimeStamp = initial.TimeStamp.Add(time.Second)
+			partial.Instance.TCPRx = 123
+			service.ProcessEvent(partial)
+			var stored models.Tunnel
+			if err := database.Where("instance_id = ?", "v2-portal").First(&stored).Error; err != nil {
+				t.Fatal(err)
+			}
+			if stored.Type != models.TunnelTypePortal || stored.CommandLine != command || stored.TCPPort == nil || *stored.TCPPort != "2006" ||
+				stored.Morph == nil || *stored.Morph != "1" || stored.SharedKey == nil || *stored.SharedKey != "secret" || stored.Name != alias || stored.Restart == nil || !*stored.Restart || stored.TCPRx != 123 {
+				t.Fatalf("partial event erased stored configuration: %+v", stored)
+			}
+			updated := portalEvent("update", 1, "v2-portal", "portal://secret@*/udp6:2017?morph=0")
+			updated.TimeStamp = partial.TimeStamp.Add(time.Second)
+			service.ProcessEvent(updated)
+			if err := database.First(&stored, stored.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if stored.TCPPort == nil || *stored.TCPPort != "" || stored.UDPPort == nil || *stored.UDPPort != "2017" || stored.Morph == nil || *stored.Morph != "0" || stored.Next == nil || *stored.Next != "none" {
+				t.Fatalf("disabled options survived SSE update: %+v", stored)
+			}
+		})
 	}
 }
